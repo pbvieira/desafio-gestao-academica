@@ -1,0 +1,47 @@
+Vamos iniciar o desenvolvimento do sistema de gestão de matrículas acadêmicas seguindo o
+fluxo definido em CLAUDE.md. Esta é a FASE 1 do projeto, focada exclusivamente em
+infraestrutura — nenhum código de domínio (Aluno, Curso, Matrícula etc.) deve ser criado
+nesta fase.
+
+CONTEXTO: D002 em docs/DECISIONS.md já registra a decisão de usar RabbitMQ em vez de Kafka
+para a mensageria — não reabra essa discussão, apenas trate como premissa.
+
+ESCOPO DESTA FASE:
+
+1. Docker Compose
+   - Adicionar RabbitMQ ao compose.yaml existente (que já tem Postgres e Redis via
+     spring-boot-docker-compose), com plugin de management habilitado.
+   - Adicionar Keycloak ao compose.yaml para autenticação/autorização (já temos
+     spring-boot-starter-security + spring-boot-starter-oauth2-client no pom.xml).
+   - Conforme o PRD, para o nível Sênior o Compose final também precisa subir a própria
+     aplicação — decida e registre se isso entra já nesta fase ou fica para uma fase
+     posterior, com justificativa.
+
+2. Banco de dados e migrations (Flyway)
+   - Criar a estrutura inicial de migrations em src/main/resources/db/migration.
+   - Nesta fase, migrations cobrem APENAS:
+     a) tabelas auxiliares/de configuração do sistema (ex: parâmetros, tabelas de apoio
+        que não são entidades de domínio do PRD);
+     b) qualquer tabela do lado da aplicação relacionada a autenticação/autorização que
+        NÃO seja gerenciada internamente pelo próprio Keycloak (ex: mapeamento de usuário
+        Keycloak -> Aluno, se for necessário — avalie e proponha).
+   - NÃO criar ainda as tabelas de domínio acadêmico (Aluno, Curso, Disciplina, Turma,
+     Matrícula) — isso é fase 2.
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Antes de implementar, crie specs/001-infraestrutura-base.md a partir do template em
+   specs/000-TEMPLATE.md, preenchendo todas as seções.
+2. Toda decisão não-trivial identificada acima (schema do Postgres para Keycloak dedicado
+   vs. compartilhado, se a app sobe no compose já nesta fase, estratégia de schema/schema
+   separation entre módulos no Postgres) deve ser levantada via skill decision-log ANTES de
+   implementar essa parte — me pergunte, não decida sozinho.
+3. Depois da spec aprovada e das decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide o compose subindo de fato (docker compose up) e a aplicação conectando nos
+   serviços.
+5. Rode code-reviewer e security-auditor sobre o que foi criado (docker-compose.yaml,
+   migrations, qualquer configuração de segurança do Keycloak) antes de considerar a fase
+   concluída — atenção especial a credenciais hardcoded no compose (devem vir de variáveis
+   de ambiente/.env, nunca hardcoded, mesmo em ambiente de dev).
+6. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

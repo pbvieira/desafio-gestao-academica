@@ -1,0 +1,65 @@
+{
+  "realm": "gestao",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "ALUNO", "description": "Aluno - se matricula e consulta as proprias matriculas" },
+      { "name": "SECRETARIA", "description": "Secretaria - cadastra/edita cursos, disciplinas, turmas" },
+      { "name": "ADMIN", "description": "Administrador - acesso total" }
+    ]
+  },
+  "users": [
+    {
+      "username": "aluno.teste",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "aluno.teste@gestao.local",
+      "firstName": "Aluno",
+      "lastName": "Teste",
+      "credentials": [{ "type": "password", "value": "aluno123", "temporary": false }],
+      "realmRoles": ["ALUNO"]
+    },
+    {
+      "username": "secretaria.teste",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "secretaria.teste@gestao.local",
+      "firstName": "Secretaria",
+      "lastName": "Teste",
+      "credentials": [{ "type": "password", "value": "secretaria123", "temporary": false }],
+      "realmRoles": ["SECRETARIA"]
+    },
+    {
+      "username": "admin.teste",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin.teste@gestao.local",
+      "firstName": "Admin",
+      "lastName": "Teste",
+      "credentials": [{ "type": "password", "value": "admin123", "temporary": false }],
+      "realmRoles": ["ADMIN"]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "gestao-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:4200/*"],
+      "webOrigins": ["http://localhost:4200"]
+    },
+    {
+      "clientId": "gestao-backend",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${env.KEYCLOAK_BACKEND_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ]
+}

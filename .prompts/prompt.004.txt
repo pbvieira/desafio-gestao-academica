@@ -1,0 +1,96 @@
+Vamos fechar a FASE 1 (infraestrutura) do sistema de gestão de matrículas acadêmicas com
+uma etapa final de fundações transversais — itens que, se deixados para a Fase 2 (domínio),
+geram retrabalho espalhado por todos os controllers/entidades futuros. Ainda nenhuma
+entidade de domínio (Aluno, Curso, Turma, Matrícula) deve ser criada nesta etapa.
+
+ESCOPO DESTA ETAPA:
+
+1. Gate de cobertura de testes (JaCoCo)
+   - Configurar jacoco-maven-plugin no pom.xml com goal `check` no ciclo de build,
+     threshold de 80% de linha/branch.
+   - Definir explicitamente o que é EXCLUÍDO do cálculo de cobertura (ex: classes de
+     configuração pura, DTOs sem lógica, código gerado) — registre a lista de exclusões e
+     a justificativa, para não inflar artificialmente o número nem penalizar código que
+     não deveria ser testado.
+   - `./mvnw clean verify` deve falhar se a cobertura cair abaixo do threshold.
+
+2. Tratamento padronizado de erros (RFC 7807 / ProblemDetail)
+   - Implementar um `@RestControllerAdvice` global usando `ProblemDetail` (nativo do Spring
+     6/Boot 3, já disponível na sua versão) para todas as exceções não tratadas.
+   - Cobrir no mínimo: erro de validação de entrada (400), não autenticado (401), não
+     autorizado (403), recurso não encontrado (404), conflito de regra de negócio (409),
+     erro interno genérico (500) — sem vazar stack trace ou detalhes internos na resposta,
+     conforme já cobrado pelo security-auditor na etapa de RBAC/ABAC.
+   - Definir um formato de "código de erro" próprio da aplicação (ex: campo `type` do
+     ProblemDetail apontando para um identificador estável, não só a mensagem em texto)
+     para que o frontend (Fase futura) possa tratar erros programaticamente, não só exibir
+     texto.
+   - Escrever teste de integração cobrindo pelo menos um caso de cada status acima.
+
+3. Estratégia de organização das migrations Flyway por módulo
+   - Decidir e registrar: uma pasta única `db/migration` compartilhada vs. uma pasta por
+     módulo Modulith (ex: `db/migration/academico`, `db/migration/notificacao`) com
+     locations configuradas por módulo no Flyway.
+   - Ajustar a estrutura já criada na Fase 1 (tabelas auxiliares/auth) para seguir o padrão
+     decidido, se for o caso.
+   - Documentar a convenção de nomenclatura de versão (ex: `V{modulo}.{sequencial}__descricao.sql`
+     ou equivalente) para orientar a Fase 2.
+
+4. Estratégia de segredos e variáveis de ambiente
+   - Criar `.env.example` versionado no repositório com todas as variáveis necessárias
+     (credenciais de Postgres, RabbitMQ, Keycloak, Grafana) com valores de exemplo/dummy,
+     nunca reais.
+   - Confirmar que `.env` real está no `.gitignore`.
+   - Revisar o `docker-compose.yaml` e o `application.yml` das etapas anteriores e
+     substituir qualquer credencial ainda hardcoded por referência a variável de ambiente.
+   - Documentar no README (mesmo que ainda incompleto) o passo "copie .env.example para
+     .env antes de subir o compose".
+
+5. OpenAPI/Swagger com esquema de segurança Bearer
+   - Configurar springdoc para expor o esquema de segurança Bearer JWT no `/swagger-ui.html`,
+     permitindo colar um token do Keycloak direto na UI para testar endpoints autenticados.
+   - Validar manualmente: obter um token de cada papel RBAC criado na etapa anterior e
+     confirmar que o Swagger UI consegue autenticar e reproduzir os bloqueios de RBAC/ABAC
+     já implementados.
+
+6. Skeleton de CI (.github/workflows)
+   - Criar um workflow mínimo que, a cada push/PR: sobe o ambiente via docker compose,
+     roda `./mvnw clean verify` (incluindo o gate de cobertura do item 1), e roda os testes
+     da pasta e2e/ (ver item 7).
+   - Ainda não precisa ter deploy — só o gate de qualidade. Documente na spec o que fica
+     para uma etapa futura (ex: cache de dependências Maven, matriz de versões).
+
+7. Smoke test e2e da infraestrutura
+   - Criar o primeiro teste em e2e/ (ainda sem depender de domínio): validação de que todos
+     os serviços do compose sobem e respondem — Postgres, RabbitMQ (management API), Keycloak
+     (endpoint de realm bem-formado), Prometheus (`/api/v1/status/config` ou equivalente),
+     Jaeger (UI responde), Loki (endpoint de ready), e a própria aplicação Spring Boot
+     (`/actuator/health` retornando UP com todos os componentes).
+   - Esse teste é o primeiro item real que o workflow de CI do item 6 vai executar.
+
+FORA DO ESCOPO desta etapa: qualquer entidade, controller ou regra de negócio de domínio —
+isso é Fase 2. Se durante a implementação você perceber que algum destes itens depende de
+uma decisão que só faz sentido decidir junto com o domínio, documente como pendência
+explícita na spec em vez de forçar uma decisão prematura.
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/004-fundacoes-transversais.md a partir do template, cobrindo os 7 itens acima
+   como subtarefas dentro da mesma spec (não precisa quebrar em specs separadas, mas cada
+   item deve ter seus próprios critérios de aceite claros).
+2. Levante via skill decision-log, ANTES de implementar: (a) exclusões do cálculo de
+   cobertura do JaCoCo; (b) pasta única vs. por módulo para migrations; (c) formato do
+   campo de código de erro no ProblemDetail; (d) qualquer outra decisão não-trivial
+   identificada.
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide cada item manualmente conforme descrito acima (Swagger com token real, CI rodando
+   localmente via `act` ou revisão do YAML, gate de cobertura falhando de propósito uma vez
+   para confirmar que funciona antes de corrigir).
+5. Rode code-reviewer e security-auditor sobre tudo o que foi criado nesta etapa — atenção
+   especial a: `.env.example` não conter nenhum valor real por engano, workflow de CI não
+   expor segredos em logs, ProblemDetail não vazando informação sensível em nenhum dos
+   status cobertos.
+6. Feche com o checklist de Definition of Done da spec, e adicione ao final da spec uma
+   seção "Pronto para Fase 2" resumindo o que a Fase 1 completa entrega — isso vai servir de
+   ponte direta para a spec de modelagem de domínio.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

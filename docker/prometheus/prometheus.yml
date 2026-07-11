@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: gestao-app
+    metrics_path: /actuator/prometheus
+    # Credencial dedicada de scrape (achado de security review - H1), precisa bater
+    # com spring.security.user.* em application.properties. Valor de desenvolvimento,
+    # nao uma credencial de usuario de negocio.
+    basic_auth:
+      username: prometheus
+      password: changeme-prometheus-scrape-local
+    static_configs:
+      # A aplicação roda fora do compose (D003) e escuta no host, porta 8080 (default
+      # do Spring Boot). O container do Prometheus alcança o host via
+      # host.docker.internal (extra_hosts no compose.yaml). Nota: o label "job" aqui
+      # ("gestao-app") é distinto do tag "application" ("gestao") que o Micrometer
+      # adiciona às métricas via management.metrics.tags.application - dimensões
+      # diferentes (origem do scrape vs. identidade do serviço), não duplicidade.
+      - targets: ['host.docker.internal:8080']

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Cache de dependencias Maven (actions/cache na pasta .m2) e matriz de versoes de
+      # JDK ficam fora do escopo desta fase (specs/004-fundacoes-transversais.md, secao
+      # 4.6) - otimizacoes que nao bloqueiam o gate de qualidade minimo pedido aqui.
+
+      - name: Preparar .env (valores de desenvolvimento, nunca segredo real)
+        run: cp .env.example .env
+
+      - name: Subir infraestrutura (docker compose, incl. observabilidade)
+        run: docker compose --profile observability up -d
+
+      - name: Build, testes e gate de cobertura (JaCoCo, D014)
+        run: ./mvnw --batch-mode clean verify
+
+      - name: Subir a aplicacao em background
+        run: |
+          nohup ./mvnw --batch-mode spring-boot:run > app.log 2>&1 &
+          echo "Aguardando a aplicacao ficar pronta..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+              echo "Aplicacao pronta."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Aplicacao nao ficou pronta a tempo."
+          exit 1
+
+      - name: Smoke test e2e (specs/004, secao 4.7)
+        run: bash e2e/smoke-test.sh
+
+      - name: Diagnostico em caso de falha
+        if: failure()
+        run: |
+          echo "--- log da aplicacao (app.log) ---"
+          cat app.log || true
+          echo "--- docker compose ps ---"
+          docker compose ps
+          echo "--- docker compose logs (ultimas 100 linhas por servico) ---"
+          docker compose logs --tail=100
+
+      - name: Encerrar ambiente
+        if: always()
+        run: docker compose --profile observability down -v

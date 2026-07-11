@@ -2,12 +2,165 @@ services:
   postgres:
     image: 'postgres:latest'
     environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+      - 'POSTGRES_DB=${POSTGRES_DB:-mydatabase}'
+      - 'POSTGRES_USER=${POSTGRES_USER:-myuser}'
+      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env (veja .env.example)}'
+      # Credenciais da role dedicada do Keycloak (D004 em docs/DECISIONS.md) — o script de
+      # init em docker/postgres-init lê estas mesmas variáveis para criar a role/banco.
+      - 'KEYCLOAK_DB_USER=${KEYCLOAK_DB_USER:-keycloak_app}'
+      - 'KEYCLOAK_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:?defina KEYCLOAK_DB_PASSWORD no .env (veja .env.example)}'
     ports:
       - '5432'
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "${POSTGRES_USER:-myuser}" -d "${POSTGRES_DB:-mydatabase}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: 'redis:latest'
     ports:
       - '6379'
+
+  # Mensageria de domínio (D002: RabbitMQ em vez de Kafka). A porta AMQP (5672) fica
+  # efêmera — a aplicação a descobre automaticamente via spring-boot-docker-compose, como
+  # já acontece com postgres/redis. A porta da management UI é fixada via variável de
+  # ambiente porque é de uso humano (inspeção manual de filas/mensagens).
+  rabbitmq:
+    image: 'rabbitmq:4.1-management'
+    environment:
+      - 'RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}'
+      - 'RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?defina RABBITMQ_DEFAULT_PASS no .env (veja .env.example)}'
+    ports:
+      - '5672'
+      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Identidade/autenticação (PRD §07). Roda em modo de desenvolvimento (start-dev) — não
+  # adequado a produção, aceitável no escopo deste desafio. Banco dedicado via D004; a
+  # porta HTTP é fixada (uso humano, sem auto-discovery do Spring Boot) mas só em loopback,
+  # para não expor o console admin em interfaces de rede além do localhost.
+  keycloak:
+    image: 'quay.io/keycloak/keycloak:26.0'
+    # --import-realm carrega docker/keycloak/import/*.json automaticamente no boot -
+    # realm como código (specs/003), sem nenhum passo manual na UI.
+    command: start-dev --import-realm
+    environment:
+      - 'KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN:-admin}'
+      - 'KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:?defina KEYCLOAK_ADMIN_PASSWORD no .env (veja .env.example)}'
+      - 'KC_DB=postgres'
+      - 'KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak'
+      - 'KC_DB_USERNAME=${KEYCLOAK_DB_USER:-keycloak_app}'
+      - 'KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:?defina KEYCLOAK_DB_PASSWORD no .env (veja .env.example)}'
+      # Lido pelo realm export (docker/keycloak/import/gestao-realm.json) via
+      # ${env.KEYCLOAK_BACKEND_CLIENT_SECRET} - achado de security review (D013): evita
+      # o mesmo valor fixo em texto claro em todo clone do repositório.
+      - 'KEYCLOAK_BACKEND_CLIENT_SECRET=${KEYCLOAK_BACKEND_CLIENT_SECRET:?defina KEYCLOAK_BACKEND_CLIENT_SECRET no .env (veja .env.example)}'
+    volumes:
+      - ./docker/keycloak/import:/opt/keycloak/data/import:ro
+    ports:
+      - '127.0.0.1:${KEYCLOAK_HTTP_PORT:-8081}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Observabilidade (specs/002-observabilidade.md) ---
+  # Atrás de um profile opcional (D008): "docker compose up" do dia a dia continua leve
+  # (só os 4 serviços acima); "docker compose --profile observability up" sobe tudo.
+
+  # Coleta métricas da aplicação (rodando no host, fora do compose - D003) via
+  # /actuator/prometheus na porta 8080 (default do Spring Boot - nenhum server.port
+  # configurado; se isso mudar numa fase futura, ajustar o target abaixo também).
+  # extra_hosts permite o container alcançar o host.
+  prometheus:
+    image: 'prom/prometheus:v3.0.1'
+    profiles: ['observability']
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --spider -q http://localhost:9090/-/ready']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Tracing distribuído, aceitando OTLP (não o formato legado Jaeger). A porta OTLP/HTTP
+  # (JAEGER_OTLP_HTTP_PORT) também é usada em application.properties pela aplicação - como
+  # a app roda no host (D003) e lê essa variável via placeholder do Spring, não via .env
+  # do compose, se o valor mudar aqui ela precisa ser exportada também no ambiente do
+  # processo Java, senão os dois lados divergem silenciosamente.
+  jaeger:
+    image: 'jaegertracing/all-in-one:1.60'
+    profiles: ['observability']
+    environment:
+      - 'COLLECTOR_OTLP_ENABLED=true'
+    ports:
+      - '127.0.0.1:${JAEGER_UI_PORT:-16686}:16686'
+      - '127.0.0.1:${JAEGER_OTLP_GRPC_PORT:-4317}:4317'
+      - '127.0.0.1:${JAEGER_OTLP_HTTP_PORT:-4318}:4318'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --spider -q http://localhost:16686/']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Backend de log centralizado (D007). Só indexa labels; o conteúdo do log fica em
+  # armazenamento local (filesystem), suficiente para o escopo do desafio.
+  loki:
+    image: 'grafana/loki:3.3.2'
+    profiles: ['observability']
+    volumes:
+      - ./docker/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    ports:
+      - '127.0.0.1:${LOKI_PORT:-3100}:3100'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --spider -q http://localhost:3100/ready']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Lê o log estruturado da aplicação (que roda no host, fora do compose - D003) e
+  # envia para o Loki. Escopo restrito de propósito ao log da própria app - não monta
+  # /var/lib/docker/containers nem docker.sock (achado de security review: qualquer
+  # uma das duas formas de "ver logs de todos os containers" acaba expondo
+  # Config.Env - segredos em texto claro - de containers de outros projetos rodando
+  # na mesma máquina, não só deste compose; ver D007/D017 em docs/DECISIONS.md).
+  promtail:
+    image: 'grafana/promtail:3.3.2'
+    profiles: ['observability']
+    command: '-config.file=/etc/promtail/config.yaml'
+    volumes:
+      - ./docker/promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - ./logs:/var/log/gestao:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # Visualização unificada de métricas (Prometheus), tracing (Jaeger) e logs (Loki),
+  # com datasources e um dashboard básico já provisionados (D009) - sem passo manual na UI.
+  grafana:
+    image: 'grafana/grafana:11.4.0'
+    profiles: ['observability']
+    environment:
+      - 'GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}'
+      - 'GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env (veja .env.example)}'
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - '127.0.0.1:${GRAFANA_PORT:-3000}:3000'
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+      loki:
+        condition: service_healthy

@@ -4,6 +4,16 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Env ###
+.env
+
+### Logs ###
+# Ponte de logs para o Promtail enquanto a app roda fora do compose (D003) - ver
+# specs/002-observabilidade.md.
+logs/
+# Log da app em background gerado pelo workflow de CI (.github/workflows/ci.yml).
+app.log
+
 ### STS ###
 .apt_generated
 .classpath

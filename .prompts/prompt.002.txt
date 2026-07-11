@@ -1,0 +1,58 @@
+Vamos continuar a FASE 1 (infraestrutura) do sistema de gestão de matrículas acadêmicas,
+seguindo o fluxo definido em CLAUDE.md. Esta etapa adiciona a stack de observabilidade —
+ainda nenhum código de domínio deve ser criado.
+
+ESCOPO DESTA ETAPA:
+
+1. Docker Compose — adicionar:
+   - Prometheus (scrape do endpoint de métricas do Spring Boot)
+   - Grafana (com provisionamento automático de datasources: Prometheus, Jaeger e o backend
+     de logs escolhido — não pedir para eu configurar manualmente na UI)
+   - Jaeger (aceitando OTLP, não o formato legado) para rastreamento distribuído
+   - Um backend de log centralizado que permita visualizar logs de todos os containers sem
+     precisar rodar `docker logs`/entrar no container — avalie Grafana Loki + Promtail como
+     default (justificativa: integra nativamente ao Grafana já presente na stack, permite
+     correlacionar log ↔ trace ↔ métrica pelo mesmo traceId na mesma tela) vs. alternativas
+     mais pesadas (EFK/ELK). Registre a escolha em docs/DECISIONS.md antes de implementar.
+
+2. Spring Boot — configurar:
+   - Actuator com health checks (`/actuator/health`) já exigidos pelo PRD.
+   - Micrometer + `micrometer-registry-prometheus` para expor métricas básicas em
+     `/actuator/prometheus`.
+   - Micrometer Tracing com bridge para OpenTelemetry, exportando via OTLP para o Jaeger.
+   - Correlation ID / trace ID nos logs: garantir que traceId/spanId apareçam
+     automaticamente em cada linha de log (via MDC do Micrometer Tracing) e que o log saia
+     em formato estruturado (JSON) compatível com o backend de log escolhido no item 1 —
+     não é aceitável ter trace ID no Jaeger sem esse mesmo ID aparecer no log correspondente.
+
+3. Documente no compose.yaml comentários explicando o papel de cada serviço novo — o
+   compose já vai estar com bastante peso (postgres, redis, rabbitmq, keycloak +
+   observabilidade), então avalie e proponha se faz sentido usar Docker Compose profiles
+   (ex: `--profile observability`) para tornar a stack de observabilidade opcional na
+   subida padrão, mantendo o ciclo de desenvolvimento do dia a dia leve, e documentar isso
+   como decisão consciente (trade-off entre "tudo sempre de pé" vs. "observabilidade sob
+   demanda").
+
+FORA DO ESCOPO desta etapa: instrumentação de trace propagando através das mensagens do
+RabbitMQ (isso fica para quando o producer/consumer de eventos existir de fato — registre
+como item pendente na spec, não implemente agora).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/002-observabilidade.md a partir do template, cobrindo os itens acima.
+2. Levante via skill decision-log, ANTES de implementar: (a) Loki+Promtail vs. alternativa
+   de log centralizado; (b) usar Docker Compose profiles ou não; (c) qualquer outra decisão
+   não-trivial que você identificar (ex: retenção de métricas/logs, dashboards provisionados
+   por padrão ou não).
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide: suba o compose, gere uma requisição de teste na aplicação e confirme
+   manualmente que (i) a métrica aparece no Prometheus, (ii) o trace aparece no Jaeger,
+   (iii) o log da mesma requisição aparece no backend de log centralizado com o mesmo
+   traceId dos outros dois pontos.
+5. Rode code-reviewer e security-auditor sobre as configurações novas — atenção especial a
+   endpoints do Actuator expostos publicamente sem proteção (ex: `/actuator/env`,
+   `/actuator/beans` não devem ficar acessíveis sem autenticação) e a credenciais do
+   Grafana/RabbitMQ management não ficarem com usuário/senha padrão em texto claro no
+   compose.
+6. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

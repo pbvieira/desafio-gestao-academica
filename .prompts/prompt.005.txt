@@ -1,0 +1,80 @@
+Vamos iniciar a FASE 2 do sistema de gestão de matrículas acadêmicas, seguindo o fluxo do
+CLAUDE.md. Esta fase implementa o CRUD completo de Aluno, Curso, Disciplina e Turma —
+NÃO inclui Matrícula (isso é Fase 3) nem qualquer lógica de vaga/concorrência (Fase 3 para
+o básico, Fase 7 para o aprofundamento — não implemente nada de controle de vaga ainda,
+mesmo que Turma precise do campo de limite de vagas para existir como dado).
+
+CONTEXTO DE PRAZO: o projeto tem prazo apertado (entrega segunda-feira). Nesta fase, a spec
+pode ser mais enxuta do que as fases anteriores — as 4 entidades seguem o mesmo padrão de
+camadas, então trate como uma spec única cobrindo as quatro, sem repetir boilerplate de
+seção para cada uma. Não sacrifique testes nem tratamento de erro por causa do prazo — esses
+dois itens são os que mais pesam na avaliação (PRD §06).
+
+ESCOPO DESTA FASE:
+
+1. Entidades e persistência
+   - Aluno, Curso, Disciplina, Turma como entidades JPA no módulo acadêmico.
+   - Migrations Flyway para as 4 tabelas, seguindo a convenção de pasta por módulo decidida
+     na Fase 1 (specs/004).
+   - Turma precisa do campo de limite de vagas e de um indicador de "aberta/fechada" (defina
+     o tipo — enum de status ou boolean — e registre a decisão) porque a Fase 3 depende
+     desses dados existirem, mas NÃO implemente a lógica de consumo/liberação de vaga aqui.
+   - Relacionamentos: Turma referencia Curso e Disciplina — modele as cardinalidades
+     corretas e registre qualquer decisão não óbvia (ex: Disciplina pertence a um Curso ou é
+     compartilhável entre cursos? Avalie o PRD e decida antes de implementar).
+
+2. Camadas (controller → service → domain → repository) e DTOs
+   - Um controller REST por entidade, com os 4 verbos: criar, editar, listar, excluir
+     (PRD §03 exige os quatro).
+   - DTOs de entrada e saída — entidades JPA não podem vazar pela API. Decida e registre a
+     estratégia de mapeamento (MapStruct vs. mapeamento manual) considerando o tempo
+     disponível.
+   - Exclusão: decida e registre soft delete (campo `ativo`/`excluidoEm`) vs. hard delete —
+     isso tem implicação direta em como a Fase 3 vai lidar com Turma excluída que já tem
+     matrícula, então pense um passo à frente antes de decidir.
+
+3. Validação de entrada
+   - Bean Validation (`jakarta.validation`) nos DTOs de entrada, com mensagens claras.
+   - Reaproveitar o `ProblemDetail` padronizado da Fase 1 (specs/004) para retornar erros de
+     validação de forma consistente com o resto da API — não crie um formato de erro novo
+     para essas entidades.
+
+4. Documentação de API
+   - Anotações OpenAPI/springdoc nos 4 controllers, reaproveitando o esquema de segurança
+     Bearer já configurado na Fase 1 — os endpoints de gestão (Curso/Disciplina/Turma)
+     devem exigir papel SECRETARIA ou ADMIN (RBAC já existe desde a etapa anterior); avalie
+     se Aluno precisa de alguma restrição de leitura própria aqui ou se isso só faz sentido
+     quando Matrícula existir (Fase 3) — registre a decisão.
+
+5. Testes
+   - Testes unitários da camada de service para cada entidade — validações de negócio
+     próprias de cada uma (ex: não pode haver dois cursos com mesmo código, se essa regra
+     existir; não pode excluir Curso com Disciplina vinculada, etc. — identifique essas
+     regras implícitas do domínio e registre as que forem decisões, não óbvias).
+   - Teste de integração (Testcontainers) cobrindo pelo menos o fluxo de criação → listagem
+     → edição → exclusão de uma das entidades como referência de padrão para as outras três.
+   - Ainda não crie e2e/ desta fase — o e2e de domínio faz mais sentido quando Matrícula
+     (Fase 3) permitir testar um fluxo de ponta a ponta com significado real.
+
+FORA DO ESCOPO desta fase: Matrícula, qualquer regra de vaga/concorrência, mensageria sobre
+essas entidades (os eventos de domínio do PRD são todos de Matrícula, não entram aqui),
+paginação/filtros (é diferencial do PRD §07 — só entra se sobrar tempo no fim).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/005-dominio-base.md a partir do template (seções condensadas conforme
+   orientado acima), cobrindo as 4 entidades.
+2. Levante via skill decision-log, ANTES de implementar: (a) MapStruct vs. mapeamento
+   manual; (b) soft delete vs. hard delete; (c) tipo do campo de status de Turma; (d)
+   cardinalidade Curso/Disciplina/Turma; (e) regras de unicidade/negócio implícitas que
+   você identificar; (f) restrição de RBAC para Aluno nesta fase.
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Rode os testes e confirme cobertura ≥ 80% no módulo acadêmico (gate já configurado na
+   Fase 1).
+5. Rode code-reviewer e security-auditor sobre o diff — atenção especial a validação de
+   entrada faltando em algum DTO e a autorização RBAC aplicada de forma inconsistente entre
+   os 4 controllers.
+6. Feche com o checklist de Definition of Done da spec, e adicione uma seção "Pronto para
+   Fase 3" confirmando que Turma tem os dados necessários (limite de vagas, status) para a
+   lógica de matrícula ser construída em cima sem precisar de migration adicional.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

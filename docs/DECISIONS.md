@@ -21,6 +21,22 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 
 <!-- Atualize este índice a cada nova entrada -->
 - [D001 — Monólito modular (Spring Modulith) em vez de microsserviços desde o início](#d001)
+- [D002 — RabbitMQ em vez de Kafka para mensageria de domínio](#d002)
+- [D003 — Aplicação entra no Docker Compose só numa fase posterior](#d003)
+- [D004 — Isolamento do banco de dados do Keycloak](#d004)
+- [D005 — Schema Postgres único (`public`) para todos os módulos](#d005)
+- [D006 — Mapeamento Keycloak ↔ Aluno adiado para a Fase 2](#d006)
+- [D007 — Grafana Loki + Promtail como backend de log centralizado](#d007)
+- [D008 — Stack de observabilidade atrás de um Docker Compose profile opcional](#d008)
+- [D009 — Dashboard básico (JVM/HTTP) provisionado por padrão no Grafana](#d009)
+- [D010 — `oauth2-resource-server` em vez de `oauth2-client` para validar tokens](#d010)
+- [D011 — Papéis RBAC: ALUNO, SECRETARIA, ADMIN](#d011)
+- [D012 — `PermissionEvaluator` customizado como mecanismo de ABAC](#d012)
+- [D013 — Client Keycloak confidential dedicado para o backend, já nesta fase](#d013)
+- [D014 — Exclusões do gate de cobertura JaCoCo](#d014)
+- [D015 — Pasta única `db/migration` para todos os módulos](#d015)
+- [D016 — `type` (URI/URN) + propriedade `errorCode` no ProblemDetail](#d016)
+- [D017 — Ponte de logs via arquivo (não appender direto) para o Promtail alcançar a app](#d017)
 
 ---
 
@@ -83,3 +99,574 @@ na entrevista com a justificativa acima.
 esperava múltiplos deploys de fato, o próximo passo natural é extrair o módulo secundário como serviço
 consumidor via o broker externo (RabbitMQ/Kafka) já exigido pelo PRD — a mensageria real já presente na
 solução reduz bastante esse custo de extração futura.
+
+---
+
+<a id="d002"></a>
+## D002 — RabbitMQ em vez de Kafka para mensageria de domínio
+
+**Data:** 2026-07-10
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/001-infraestrutura-base.md
+**Contexto:** O PRD exige comunicação assíncrona real entre o contexto acadêmico e o contexto secundário
+(notificação/auditoria), com publicação e consumo de eventos de domínio (`MatriculaCriada`,
+`MatriculaConfirmada`, `MatriculaCancelada`).
+
+**Alternativas consideradas:**
+- **Kafka** — log distribuído, forte em replay e alto volume, mas operação (Zookeeper/KRaft, tópicos,
+  partições) desproporcional ao volume e ao prazo de 7 dias corridos deste desafio.
+- **RabbitMQ** — modelo de filas/AMQP mais simples de operar, configurar e explicar em entrevista, com
+  management UI pronta para inspecionar filas/mensagens durante o desenvolvimento e a demonstração.
+
+**Decisão:** RabbitMQ.
+
+**Justificativa:** Para o escopo e o prazo do desafio, o ganho de simplicidade operacional e de clareza na
+demonstração supera o apelo de "escala" do Kafka — não há requisito de throughput ou replay de log que
+justifique a complexidade adicional.
+
+**Trade-offs aceitos:** Sem replay de log nativo como no Kafka; se a vaga tivesse foco explícito em alto
+volume/streaming, Kafka teria mais valor de sinalização técnica.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado no escopo atual do desafio.
+
+---
+
+<a id="d003"></a>
+## D003 — Aplicação entra no Docker Compose só numa fase posterior
+
+**Data:** 2026-07-10
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/001-infraestrutura-base.md
+**Contexto:** O PRD exige, para o nível Sênior, que o Docker Compose final suba aplicação, banco de dados e
+mensageria — mas não especifica em qual momento do desenvolvimento isso precisa acontecer.
+
+**Alternativas consideradas:**
+- **Já na Fase 1 (infraestrutura)** — detecta cedo problemas de rede/variáveis de ambiente entre containers,
+  mas exige Dockerfile e rebuild de imagem a cada iteração das Fases 2/3, que ainda não têm nenhum código de
+  domínio.
+- **Fase posterior** — a app roda localmente via `./mvnw spring-boot:run` contra os serviços do compose
+  durante o desenvolvimento de domínio; a containerização da app entra perto da entrega final, quando a API
+  estabilizar.
+
+**Decisão:** Fase posterior — a aplicação entra no `compose.yaml` mais perto da entrega final.
+
+**Justificativa:** Evita rebuild de imagem a cada mudança de código durante as fases de domínio, sem abrir
+mão do requisito do PRD, que fala do "compose final", não de cada fase intermediária.
+
+**Trade-offs aceitos:** Problemas de rede/variáveis de ambiente entre a app containerizada e os demais
+serviços só serão validados perto do fim do desenvolvimento.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se surgir sinal de que a integração via
+container é arriscada (ex: configuração de rede complexa), antecipar essa validação antes da fase final.
+
+---
+
+<a id="d004"></a>
+## D004 — Isolamento do banco de dados do Keycloak
+
+**Data:** 2026-07-10
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/001-infraestrutura-base.md
+**Contexto:** O Keycloak precisa de um banco relacional próprio para seus dados internos (usuários,
+realms, clients). O `compose.yaml` já tem um serviço Postgres usado pela aplicação.
+
+**Alternativas consideradas:**
+- **Mesmo container, mesmo banco, schema separado** (`KC_DB_SCHEMA=keycloak`) — configuração mais simples
+  (sem init script), mas menos isolamento — um único banco concentra dados de identidade e de domínio.
+- **Mesmo container Postgres, banco dedicado** (`keycloak`), criado via script de init
+  (`docker-entrypoint-initdb.d`) — isola os dados de identidade sem o custo de mais um processo.
+- **Container Postgres dedicado só para o Keycloak** — isolamento total de infraestrutura, mas mais um
+  processo Postgres para subir/gerenciar apenas para este desafio.
+
+**Decisão:** Mesmo container Postgres, banco `keycloak` dedicado, criado via script de init.
+
+**Justificativa:** Equilíbrio entre isolar dados de identidade do domínio acadêmico e não pagar o custo
+operacional de mais um container Postgres, adequado ao escopo de 7 dias do desafio.
+
+**Trade-offs aceitos:** Um script de init a mais para manter; se o container Postgres cair, tanto app
+quanto Keycloak são afetados juntos (acoplamento de disponibilidade) — aceitável neste escopo.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se a solução evoluísse para produção real,
+valeria considerar um Postgres gerenciado dedicado para identidade.
+
+**Refinamento pós-security-review (2026-07-10):** a primeira implementação usava `POSTGRES_USER`/
+`POSTGRES_PASSWORD` (o superusuário da aplicação) também como credencial do Keycloak em `KC_DB_USERNAME`/
+`KC_DB_PASSWORD`. O `security-auditor` apontou que isso preservava o isolamento de *dados* (bancos
+separados) mas não o isolamento de *privilégio* — um vazamento da credencial do Keycloak (ex.: log de
+erro, dump de env do container) daria acesso de superusuário ao banco de domínio acadêmico também.
+Corrigido: o script de init (`docker/postgres-init/01-create-keycloak-db.sh`) agora cria uma role dedicada
+`keycloak_app` (via `KEYCLOAK_DB_USER`/`KEYCLOAK_DB_PASSWORD`, próprias, sem fallback óbvio), dona apenas do
+banco `keycloak`. Também padronizado: nenhuma variável de senha no `compose.yaml` tem mais fallback
+adivinhável (`guest`, `admin`, `secret`) — todas usam `${VAR:?...}`, exigindo um `.env` explícito.
+
+---
+
+<a id="d005"></a>
+## D005 — Schema Postgres único (`public`) para todos os módulos
+
+**Data:** 2026-07-10
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/001-infraestrutura-base.md
+**Contexto:** A aplicação terá pelo menos dois módulos Modulith (acadêmico e um secundário de
+notificação/auditoria). É preciso decidir se essa separação de módulo também se reflete em schemas
+diferentes no Postgres.
+
+**Alternativas consideradas:**
+- **Schema único `public`** — todas as tabelas dos módulos convivem no mesmo schema; a fronteira de módulo
+  é reforçada apenas no código (Spring Modulith, via `ApplicationModules.verify()`).
+- **Schema por módulo** (ex: `academico`, `notificacao`) — isolamento também no nível de banco, mais
+  próximo de uma futura extração para serviços separados, mas exige múltiplas *locations* no Flyway e
+  cuidado com referências entre schemas.
+
+**Decisão:** Schema único `public`.
+
+**Justificativa:** Coerente com D001 — a fronteira de módulo já é verificada em tempo de teste pelo Spring
+Modulith; replicá-la também no banco adicionaria complexidade de configuração do Flyway (múltiplas
+locations, FKs cross-schema) sem ganho de isolamento adicional demonstrável no prazo do desafio.
+
+**Trade-offs aceitos:** Menos "prova visual" de separação ao olhar só o schema do banco; mitigado por
+convenção de nomenclatura de tabela por contexto e pela estrutura de pacotes no código.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se algum módulo precisar ser extraído de fato
+como serviço separado no futuro, esse é o momento natural de revisitar e migrar para banco/schema próprio.
+
+---
+
+<a id="d006"></a>
+## D006 — Mapeamento Keycloak ↔ Aluno adiado para a Fase 2
+
+**Data:** 2026-07-10
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/001-infraestrutura-base.md
+**Contexto:** O Keycloak gerencia usuários/credenciais internamente, mas a aplicação provavelmente
+precisará associar um usuário autenticado a um Aluno (ou outro papel de domínio). A tabela `Aluno` ainda
+não existe — está planejada para a Fase 2.
+
+**Alternativas consideradas:**
+- **Criar já nesta fase uma tabela solta** (`usuario_keycloak`, sem FK) e ligar de fato só na Fase 2 —
+  mantém toda a "infra de auth" dentro da Fase 1, mas sem integridade referencial até lá.
+- **Adiar totalmente para a Fase 2** — o mapeamento (coluna `keycloak_subject_id` ou tabela dedicada, a
+  definir na spec da Fase 2) entra junto da própria migration que cria `Aluno`.
+
+**Decisão:** Adiar para a Fase 2.
+
+**Justificativa:** Evita criar uma tabela/coluna sem integridade referencial real que ficaria "pendurada"
+até a Fase 2; nenhuma funcionalidade desta fase de infraestrutura depende desse mapeamento existir antes.
+
+**Trade-offs aceitos:** Nenhum endpoint autenticado conseguirá resolver "qual Aluno é este usuário" antes
+da Fase 2 — aceitável porque nenhuma rota de domínio existe ainda nesta fase.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d007"></a>
+## D007 — Grafana Loki + Promtail como backend de log centralizado
+
+**Data:** 2026-07-10
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/002-observabilidade.md
+**Contexto:** O PRD pede rastreabilidade mínima (logs estruturados, correlation/trace ID). Com Prometheus
+(métricas) e Jaeger (tracing) já na stack, falta um jeito de visualizar logs de todos os containers sem
+precisar rodar `docker logs`/entrar em cada container manualmente.
+
+**Alternativas consideradas:**
+- **Grafana Loki + Promtail** — Promtail coleta logs dos containers e envia para o Loki, que só indexa
+  labels (não faz full-text indexing pesado); Grafana já está na stack como visualização de métricas, então
+  passa a ser também o ponto único para logs — permitindo correlacionar log ↔ trace ↔ métrica pelo mesmo
+  `traceId` na mesma tela (Explore do Grafana).
+- **EFK/ELK** (Elasticsearch + Fluentd/Filebeat + Kibana) — busca full-text mais robusta e ecossistema mais
+  conhecido no mercado, mas Elasticsearch sozinho já pede bem mais memória que toda a stack Loki, mais uma
+  UI separada (Kibana) desacoplada do Grafana, e setup mais longo para o prazo de 7 dias do desafio.
+
+**Decisão:** Grafana Loki + Promtail.
+
+**Justificativa:** Correlação log↔trace↔métrica na mesma ferramenta (Grafana) é o ganho mais relevante para
+a demonstração/entrevista; o footprint de recursos e o tempo de setup também pesaram a favor, dado o prazo
+do desafio.
+
+**Trade-offs aceitos:** Sem busca full-text nativa no conteúdo dos logs (Loki só indexa labels) — para o
+volume e o propósito de um desafio técnico, isso não é uma limitação relevante.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o volume de logs ou a necessidade de busca
+textual crescesse muito (cenário de produção real, múltiplas instituições), valeria reavaliar Elasticsearch
+como backend de log.
+
+**Refinamento pós-security-review (2026-07-11):** a implementação original centralizava logs de **todos**
+os containers do compose (via bind mount de `/var/lib/docker/containers`, evitando `docker.sock` — ver
+D017). O `security-auditor` apontou que essa forma de acesso (mesmo sem `docker.sock`) expõe
+`config.v2.json` de cada container, que contém `Config.Env` em **texto claro** — ou seja, as credenciais de
+qualquer container rodando na mesma máquina host (não só deste projeto) ficavam legíveis de dentro do
+container do Promtail. Reduzido o escopo do Promtail para ler **só** o log da própria aplicação (ponte de
+arquivo, D017), abrindo mão de centralizar logs de infraestrutura (Postgres/Keycloak/etc.) em troca de
+eliminar essa exposição. Se a visibilidade de logs de infraestrutura for necessária no futuro, usar um
+mecanismo com escopo mais restrito (ex: driver de log dedicado por serviço) em vez de acesso amplo ao
+diretório de containers do host.
+
+---
+
+<a id="d008"></a>
+## D008 — Stack de observabilidade atrás de um Docker Compose profile opcional
+
+**Data:** 2026-07-10
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/002-observabilidade.md
+**Contexto:** A stack de observabilidade (Prometheus, Grafana, Jaeger, Loki, Promtail) soma mais 5 serviços
+aos 4 já existentes (postgres, redis, rabbitmq, keycloak). É preciso decidir se ela sobe sempre junto no
+`docker compose up` do dia a dia ou fica atrás de um mecanismo opcional.
+
+**Alternativas consideradas:**
+- **Sempre junto (sem profiles)** — um único comando sobe tudo, mais simples de explicar, mas o ciclo de
+  desenvolvimento diário fica pesado (9 containers) mesmo quando observabilidade não é o foco do momento.
+- **Docker Compose profile `observability`** — `docker compose up` cotidiano continua leve (só os 4
+  serviços de infra "core"); a stack de observabilidade só sobe com
+  `docker compose --profile observability up`.
+
+**Decisão:** Profile `observability` opcional.
+
+**Justificativa:** Mantém o ciclo de desenvolvimento de domínio (Fases 2/3) leve por padrão, sem abrir mão
+de ter a stack de observabilidade completa disponível sob demanda — e o uso de profiles em si já é um sinal
+técnico razoável de organização do compose para quem for avaliar o repositório.
+
+**Trade-offs aceitos:** Mais um comando/flag para documentar no README (`--profile observability`); quem
+não ler a documentação pode achar que a observabilidade "não existe" por não aparecer no `docker compose up`
+padrão.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado — reversível a qualquer
+momento (bastaria remover a chave `profiles:` dos serviços).
+
+---
+
+<a id="d009"></a>
+## D009 — Dashboard básico (JVM/HTTP) provisionado por padrão no Grafana
+
+**Data:** 2026-07-10
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/002-observabilidade.md
+**Contexto:** Além dos datasources (Prometheus, Jaeger, Loki), era preciso decidir se o Grafana já vem com
+algum dashboard pronto ou se fica só com os datasources provisionados, sem nenhum dashboard, nesta fase.
+
+**Alternativas consideradas:**
+- **Só datasources agora** — nenhum dashboard de domínio existe ainda (sem métricas de matrícula/vaga para
+  mostrar), então um dashboard pronto teria conteúdo só genérico (JVM/HTTP).
+- **Provisionar já um dashboard básico (JVM/HTTP)** — usa as métricas padrão do Micrometer/Actuator
+  (memória, GC, requests HTTP, etc.), disponível de cara, sem montar nada manualmente na UI do Grafana.
+
+**Decisão:** Provisionar um dashboard básico de JVM/HTTP por padrão (contrariando o default sugerido pela
+IA, que era só datasources).
+
+**Justificativa (do Pablo):** Provar visualmente, desde já, que o pipeline métrica → Prometheus → Grafana
+funciona ponta a ponta tem valor de demonstração imediato, mesmo antes de existir uma métrica de domínio —
+evita depender de configurar isso manualmente na UI mais tarde, sob pressão de tempo.
+
+**Trade-offs aceitos:** Mais um arquivo de provisionamento (JSON do dashboard) para manter; quando métricas
+de domínio (ex: matrículas confirmadas/min) existirem, esse dashboard provavelmente precisará ser
+estendido ou substituído.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d010"></a>
+## D010 — `oauth2-resource-server` em vez de `oauth2-client` para validar tokens
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/003-seguranca-rbac-abac.md
+**Contexto:** O `pom.xml` já trazia `spring-boot-starter-oauth2-client` (padrão do Spring Initializr), mas
+a API é chamada por um frontend separado que faz o login e envia um Bearer token — a API só precisa validar
+esse token, não iniciar um fluxo de login/manter sessão.
+
+**Alternativas consideradas:**
+- **Manter `oauth2-client`** — papel de "cliente OAuth2" (a própria app inicia login, redirect, sessão);
+  não é o papel que uma API stateless validando Bearer tokens de terceiros precisa desempenhar.
+- **Adicionar `oauth2-resource-server`** — papel de "resource server": valida assinatura/expiração do JWT
+  (via `issuer-uri`/JWKS do Keycloak) e extrai authorities dele; é exatamente o papel de uma API REST
+  protegida por Bearer token.
+
+**Decisão:** Adicionar `spring-boot-starter-oauth2-resource-server`; remover `spring-boot-starter-oauth2-client`
+do `pom.xml` por não ter nenhum uso na arquitetura atual (frontend separado, sem fluxo de login server-side
+na própria API).
+
+**Justificativa:** Reduz dependências não utilizadas e comunica corretamente, para quem ler o `pom.xml`, qual
+é o papel real da aplicação no fluxo OAuth2/OIDC.
+
+**Trade-offs aceitos:** Se um dia a própria API precisar iniciar um fluxo de login (ex: um painel
+server-side rendered), `oauth2-client` precisaria voltar ao `pom.xml`.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado no escopo atual.
+
+---
+
+<a id="d011"></a>
+## D011 — Papéis RBAC: ALUNO, SECRETARIA, ADMIN
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/003-seguranca-rbac-abac.md
+**Contexto:** O PRD descreve cadastro/edição/exclusão de alunos, cursos, disciplinas, turmas, matrícula de
+aluno em turma e consultas por aluno/turma — sem especificar um modelo de papéis explícito. Era preciso
+definir um conjunto de papéis RBAC razoável para o Keycloak antes de modelar o realm.
+
+**Alternativas consideradas:**
+- **ALUNO, SECRETARIA, ADMIN** — ALUNO se matricula/consulta as próprias matrículas; SECRETARIA
+  cadastra/edita cursos, disciplinas, turmas (e matrículas de qualquer aluno); ADMIN acesso total (ex:
+  gestão de usuários/papéis). Mapeia bem a separação de responsabilidades sugerida pelo PRD.
+- **ALUNO, STAFF** (2 papéis) — junta SECRETARIA+ADMIN em um único papel; menos granularidade, mas evita
+  modelar uma distinção sem regra de negócio realmente diferente entre os dois hoje no PRD.
+
+**Decisão:** ALUNO, SECRETARIA, ADMIN (papéis de realm no Keycloak, não papéis de client).
+
+**Justificativa:** Comunica melhor, para efeito de entrevista/avaliação, a separação de responsabilidades
+que o PRD pede — mesmo que hoje SECRETARIA e ADMIN tenham sobreposição de permissões, a distinção fica
+pronta para divergir quando regras mais finas (ex: gestão de usuários exclusiva de ADMIN) forem adicionadas.
+
+**Trade-offs aceitos:** Nesta fase, sem entidades de domínio, a diferença prática entre SECRETARIA e ADMIN
+é mínima — a distinção só ganha peso real na Fase 2.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se, na Fase 2, nenhuma regra realmente
+diferenciar SECRETARIA de ADMIN, revisitar se vale a pena colapsar os dois papéis.
+
+---
+
+<a id="d012"></a>
+## D012 — `PermissionEvaluator` customizado como mecanismo de ABAC
+
+**Data:** 2026-07-11
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/003-seguranca-rbac-abac.md
+**Contexto:** Era preciso definir como regras de posse/atributo (ABAC) seriam expressas no código — ex:
+"aluno só vê a própria matrícula" (regra real, Fase 2) e "usuário só vê o próprio perfil" (exemplo
+funcional desta fase).
+
+**Alternativas consideradas:**
+- **Bean customizado + SpEL direto** (`@PreAuthorize("@ownershipGuard.isOwnProfile(#id, authentication)")`)
+  — mais direto/simples de ler e testar como um bean Spring comum, sem implementar uma interface formal do
+  Spring Security.
+- **`PermissionEvaluator` customizado** (`hasPermission(#id, 'PERFIL', 'READ')`) — segue o mecanismo
+  "oficial" do Spring Security para autorização baseada em atributo/objeto, com dispatch por
+  tipo+permissão; mais verboso para implementar, mas é o padrão mais reconhecível por quem já trabalhou
+  com Spring Security e se generaliza melhor conforme mais tipos de recurso/permissão forem adicionados
+  na Fase 2 (Matrícula, Turma, etc.), evitando um bean com um método ad-hoc para cada regra.
+- **Keycloak Authorization Services (UMA/policies)** — descartada: chamada de rede por decisão de
+  autorização, mais difícil de testar unitariamente, setup desproporcional ao prazo do desafio.
+
+**Decisão (do Pablo, contrariando o default sugerido pela IA):** `PermissionEvaluator` customizado.
+
+**Justificativa (do Pablo):** Prefere o mecanismo mais alinhado ao padrão "oficial" do Spring Security,
+mesmo custando mais verbosidade agora, por generalizar melhor quando a Fase 2 trouxer múltiplos tipos de
+recurso (Matrícula, Turma) precisando da mesma engrenagem de autorização por posse.
+
+**Trade-offs aceitos:** Implementação inicial mais verbosa (registrar o bean, expor via
+`MethodSecurityExpressionHandler`, dispatch por `targetType`/`permission`) do que a alternativa de bean+SpEL
+direto, para um ganho que só se paga quando houver mais de um tipo de recurso.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado — é a via mais
+extensível das três, revisão futura só se a complexidade do dispatch por tipo crescer além do previsto.
+
+---
+
+<a id="d013"></a>
+## D013 — Client Keycloak confidential dedicado para o backend, já nesta fase
+
+**Data:** 2026-07-11
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/003-seguranca-rbac-abac.md
+**Contexto:** Era preciso decidir se o backend (que só valida tokens localmente via JWKS, sem precisar de
+client id/secret próprio para isso) já ganha um client Keycloak confidential registrado no realm, ou se
+isso fica para quando houver um uso concreto (ex: chamadas à Admin API do Keycloak, introspecção de token,
+client-credentials para service-to-service).
+
+**Alternativas consideradas:**
+- **Nenhum client dedicado agora** — o backend, como resource server, só precisa do `issuer-uri`/JWKS;
+  o realm só registraria o client do frontend (público, PKCE). Adiar o client do backend para quando
+  houver uso real.
+- **Já registrar um client confidential para o backend** — provisiona desde já o client (com secret) no
+  realm exportado, mesmo sem um consumidor de código imediato.
+
+**Decisão (do Pablo, contrariando o default sugerido pela IA):** já registrar um client confidential
+`gestao-backend` no realm exportado.
+
+**Justificativa (do Pablo):** Antecipar a necessidade em vez de ter que reabrir o realm export depois;
+nenhum uso imediato foi especificado no momento da decisão.
+
+**Implementação:** o client é registrado no realm export versionado com um **secret placeholder de
+desenvolvimento** (não sensível — protege só um Keycloak local efêmero do `docker compose`, nunca exposto
+publicamente), documentado em `.env.example` como `KEYCLOAK_BACKEND_CLIENT_SECRET`. Nenhum código desta
+fase efetivamente consome esse secret (o backend continua validando JWTs localmente via `issuer-uri`); ele
+fica pronto para quando um uso real (Admin API, introspecção, client-credentials) aparecer.
+
+**Trade-offs aceitos:** Um secret "morto" (não usado por código) existe desde já no ambiente — superfície
+nula de risco real (é um valor de desenvolvimento, não protege nada em produção), mas vale revisitar se,
+ao final do desafio, ele seguir sem nenhum consumidor (nesse caso, considerar removê-lo do realm export
+antes da entrega final, para não parecer uma peça solta sem explicação).
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se nenhuma fase futura vier a consumir esse
+client, remover do realm export antes da entrega para não deixar configuração órfã.
+
+**Refinamento pós-security-review (2026-07-11):** o `security-auditor` reforçou o risco já identificado
+nesta decisão (secret sem consumidor) e apontou que a justificativa "Keycloak local efêmero" não é garantida
+por nenhum controle técnico — nada impede que este `compose.yaml` seja reaproveitado como base de um
+ambiente compartilhado. Corrigido: o secret não é mais uma string fixa no realm export; usa a substituição
+nativa do Keycloak `${env.KEYCLOAK_BACKEND_CLIENT_SECRET}` (lida do ambiente do container `keycloak`, por
+sua vez vinda de `.env`), então cada ambiente/clone do repositório tem um valor diferente, não mais o mesmo
+valor idêntico versionado no Git.
+
+---
+
+<a id="d014"></a>
+## D014 — Exclusões do gate de cobertura JaCoCo
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/004-fundacoes-transversais.md
+**Contexto:** O gate de cobertura de 80% (JaCoCo `check`) precisa de exclusões explícitas para não penalizar
+código que não deveria contar como "lógica testável" (config pura, DTOs, classe principal, getters/setters
+gerados pelo Lombok) nem inflar o número artificialmente.
+
+**Alternativas consideradas:**
+- **Config + DTOs + classe principal + Lombok `@Generated`** — exclui só o que é estruturalmente
+  não-testável ou irrelevante (`*Application`, `**/config/**`, `**/dto/**`/sufixos Request-Response, código
+  marcado `@lombok.Generated` via `lombok.config`). Mantém a régua rigorosa sobre lógica de negócio e de
+  segurança real.
+- **Também excluir exceções e "glue" de segurança** (`SecurityConfig`, `MethodSecurityConfig`, classes de
+  exceção customizadas) — reduziria ainda mais a régua, mas essas classes de segurança já tendem a ser
+  exercitadas pelos testes de integração de RBAC/ABAC (spec 003); excluí-las poderia esconder um filtro mal
+  configurado que os testes não cobrem.
+
+**Decisão:** Config puro + DTOs + classe principal + Lombok `@Generated`.
+
+**Justificativa:** Exclui só o que é genuinamente não-testável por natureza (wiring/config, data holders),
+sem abrir uma exceção para código de segurança que já tem teste de integração cobrindo — evita esconder
+uma regressão de RBAC/ABAC atrás de uma exclusão de cobertura complacente demais.
+
+**Trade-offs aceitos:** Classes de configuração de segurança "puramente estruturais" (poucos branches) vão
+contar para o denominador da régua de 80%, mesmo tendo pouca lógica própria — impacto esperado é pequeno.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se, na prática, classes de configuração
+começarem a puxar a % para baixo sem ganho real de sinal de qualidade, revisitar a lista de exclusões.
+
+---
+
+<a id="d015"></a>
+## D015 — Pasta única `db/migration` para todos os módulos
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/004-fundacoes-transversais.md
+**Contexto:** Com múltiplos módulos Modulith previstos (`academico`, `notificacao`, `security`), era preciso
+decidir a organização física dos arquivos de migration do Flyway — distinto de D005 (que já decidiu o
+schema único `public`; esta decisão é sobre estrutura de arquivo/pasta, não sobre schema).
+
+**Alternativas consideradas:**
+- **Pasta única `db/migration`**, com o módulo indicado na descrição do nome do arquivo (ex:
+  `V1__academico_criar_tabela_aluno.sql`) — Flyway na configuração default (uma location), ordenação
+  cronológica única, simples de entender.
+- **Pasta por módulo** (`db/migration/academico`, `db/migration/notificacao`) com múltiplas *locations*
+  configuradas — mais organizado visualmente conforme o número de módulos cresce, mas a ordem de aplicação
+  entre pastas segue só o número de versão (não a pasta), podendo intercalar de forma não óbvia sem uma
+  convenção extra de numeração por módulo.
+
+**Decisão:** Pasta única `db/migration`, convenção de nome `V{sequencial}__{modulo}_{descricao}.sql`.
+
+**Justificativa:** Coerente com D005 — a fronteira de módulo já é responsabilidade do código (Spring
+Modulith), não da estrutura de arquivos; uma única location evita a armadilha de ordenação entre múltiplas
+locations sem ganho real de organização neste volume de migrations.
+
+**Trade-offs aceitos:** Conforme o número de migrations crescer muito, a pasta única pode ficar longa —
+mitigado pelo prefixo de módulo no nome do arquivo, que já permite filtrar visualmente.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o volume de migrations por módulo crescer
+muito e a leitura da pasta única ficar difícil, revisitar para pasta por módulo.
+
+---
+
+<a id="d016"></a>
+## D016 — `type` (URI/URN) + propriedade `errorCode` no `ProblemDetail`
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/004-fundacoes-transversais.md
+**Contexto:** O tratamento padronizado de erros (RFC 7807/`ProblemDetail`) precisa de um identificador
+estável para que o frontend trate erros programaticamente, não só exiba a mensagem em texto.
+
+**Alternativas consideradas:**
+- **Só uma propriedade customizada `errorCode`** (ex: `ERR_VALIDATION`), deixando `type` no default
+  (`about:blank`) — mais simples, mas abre mão do uso que a própria RFC 7807 prevê para o campo `type`.
+- **`type` como URI/URN estável + propriedade customizada `errorCode`** — `type` aponta para um
+  identificador de catálogo (ex: `urn:gestao:erro:validacao-entrada`), como a RFC prevê; `errorCode`
+  (string curta) via `setProperty(...)` dá ao frontend uma comparação direta sem parsear URI.
+
+**Decisão:** `type` (URI/URN estável) + propriedade customizada `errorCode`.
+
+**Justificativa:** Cobre a corretude da RFC 7807 (uso pretendido do campo `type`) e a ergonomia prática do
+frontend (comparação direta por `errorCode`) ao mesmo tempo, sem custo de implementação relevante a mais.
+
+**Trade-offs aceitos:** Duas formas de identificar o mesmo erro (`type` e `errorCode`) precisam ser mantidas
+em sincronia — pequeno risco de divergência se um for atualizado sem o outro.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+**Refinamento pós-review (2026-07-11):** achados de `code-reviewer`/`security-auditor` sobre a implementação:
+(1) a mensagem/errorCode do 403 estavam duplicados como string literal em `GlobalExceptionHandler` e em
+`SecurityErrorHandlingConfig` — extraído `ProblemDetailFactory.accessDenied(path)` como ponto único; (2) a
+cadeia de Basic Auth do scrape do Prometheus (`/actuator/prometheus`) não usava o `AuthenticationEntryPoint`
+customizado, então uma falha de autenticação ali saía em formato diferente do resto da API — corrigido para
+reaproveitar o mesmo bean; (3) `MethodArgumentNotValidException` só mapeava `getFieldErrors()`, descartando
+silenciosamente erros de validação de nível de classe (`getGlobalErrors()`) — corrigido.
+
+---
+
+<a id="d017"></a>
+## D017 — Ponte de logs via arquivo (não appender direto) para o Promtail alcançar a app
+
+**Data:** 2026-07-11
+**Origem:** 🤖 Default da IA, decidido durante a implementação sem pausar para perguntar (necessidade
+emergente, descoberta empiricamente ao validar a spec 002 — não fazia parte das 3 decisões levantadas
+previamente)
+**Spec relacionada:** specs/002-observabilidade.md
+**Contexto:** Ao validar a correlação log↔trace↔métrica (critério de aceite da spec 002), descobri que o
+Promtail — configurado para ler `/var/lib/docker/containers/*/*-json.log` (D007, evitando `docker.sock`) —
+nunca via os logs da aplicação, porque a app roda no **host**, fora do compose (D003). O driver `json-file`
+do Docker só captura logs de containers; um processo do host não passa por ele.
+
+**Alternativas consideradas:**
+- **Ponte via arquivo** — a app grava logs estruturados (ECS) também em um arquivo (`logs/gestao.log`, via
+  `logging.file.name`/`logging.structured.format.file`, ambos nativos do Spring Boot), montado
+  somente-leitura no container do Promtail (`./logs:/var/log/gestao:ro`), com um scrape job dedicado.
+- **Appender Logback direto para o Loki** (ex: biblioteca `loki-logback-appender`) — envia logs via HTTP
+  diretamente da JVM para o Loki, sem depender de arquivo/container; funcionaria independente de onde a
+  app roda, mas adiciona uma dependência nova ao projeto e mais uma configuração de biblioteca externa.
+
+**Decisão:** Ponte via arquivo.
+
+**Justificativa:** Zero dependência nova (usa só propriedades nativas do Spring Boot já usadas para o
+console); consistente com a escolha já feita de não adicionar complexidade além do necessário (mesmo
+espírito de D007 ao evitar `docker.sock`). Quando a aplicação entrar no `compose.yaml` (D003, fase futura),
+reavaliar se este job de scrape dedicado ainda é necessário ou se a app passa a cair naturalmente no job
+`docker-containers` (nesse caso, o job/arquivo específico pode ser removido).
+
+**Trade-offs aceitos:** Mais um artefato (`logs/`, `.gitignore`, volume) a manter enquanto a app roda fora
+do compose; duplica a escrita de log (console + arquivo) até essa fase futura.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Revisitar quando D003 for revertida (app
+entrando no compose) — ver justificativa acima.
+
+**Refinamento pós-security-review (2026-07-11):** o job `docker-containers` (que lia
+`/var/lib/docker/containers` para centralizar logs de todos os serviços do compose, não só da app) foi
+removido — ver refinamento equivalente em D007. O Promtail hoje só lê a ponte de arquivo desta decisão
+(`gestao-app`), nada mais. Também removidos `trace_id`/`span_id` do stage `labels:` do Promtail (mantidos
+só no conteúdo da linha): promovê-los a label do Loki cria uma série por valor único (alta cardinalidade),
+e como `/actuator/health`/`/actuator/prometheus` são públicos, qualquer cliente não autenticado poderia
+gerar esse volume — um vetor de esgotamento de recursos no Loki. A correlação log→trace no Grafana usa
+`derivedFields` (regex sobre o conteúdo da linha, não sobre labels), então a funcionalidade não foi afetada.

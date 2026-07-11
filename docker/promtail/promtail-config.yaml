@@ -1,0 +1,40 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+# Escopo restrito de propósito ao log da própria aplicação (ver D007/D017 em
+# docs/DECISIONS.md): um job que centralizasse logs de TODOS os containers do host
+# (via /var/lib/docker/containers ou via docker.sock) foi avaliado e descartado após
+# security review - qualquer uma das duas formas acaba expondo Config.Env (segredos
+# em texto claro) de containers de outros projetos rodando na mesma máquina, não só
+# deste compose. O ganho (ver logs de infra tipo Postgres/Keycloak no Grafana) não
+# compensava esse risco. A app roda no host (D003) e grava logs estruturados (ECS)
+# num arquivo próprio, montado aqui somente leitura - sem acesso a nada além disso.
+scrape_configs:
+  - job_name: gestao-app
+    static_configs:
+      - targets: ['localhost']
+        labels:
+          job: gestao-app
+          __path__: /var/log/gestao/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: log.level
+            time: '"@timestamp"'
+      # trace_id/span_id NÃO viram labels: cardinalidade alta (um valor novo por
+      # requisição) inflaria o índice do Loki sem limite, e endpoints públicos
+      # (/actuator/health, /actuator/prometheus) permitiriam a qualquer cliente não
+      # autenticado gerar esse volume. A correlação log->trace no Grafana usa
+      # derivedFields (regex sobre o CONTEÚDO da linha), não precisa de label.
+      - labels:
+          level:
+      - timestamp:
+          source: time
+          format: RFC3339Nano

@@ -1,0 +1,80 @@
+Vamos continuar a FASE 1 (infraestrutura) do sistema de gestão de matrículas acadêmicas,
+seguindo o fluxo definido em CLAUDE.md. Esta etapa define e implementa a fundação do modelo
+de autorização — RBAC via Keycloak + ABAC aplicado no backend. Ainda nenhuma entidade de
+domínio (Aluno, Curso, Turma, Matrícula) deve ser criada nesta etapa.
+
+IMPORTANTE — escopo real desta etapa: RBAC pode ser fechado por completo aqui, porque
+depende só de papéis/roles, que são infraestrutura (Keycloak). ABAC NÃO pode ser fechado por
+completo ainda, porque as regras de posse (ex: "aluno só vê a própria matrícula") dependem
+de entidades que só existirão na Fase 2. Esta etapa entrega o MECANISMO de ABAC (como regras
+de posse serão expressas, aplicadas e testadas) com um exemplo funcional sobre uma entidade
+de placeholder ou sobre o próprio recurso de usuário/perfil — não as regras de negócio finais.
+Deixe isso explícito na spec, não implemente regras de posse fictícias sobre entidades que
+ainda não existem.
+
+ESCOPO DESTA ETAPA:
+
+1. RBAC (Role-Based Access Control) via Keycloak
+   - Modelar papéis no realm do Keycloak. Proposta de default a confirmar via decision-log:
+     ALUNO, SECRETARIA (gestão de cursos/disciplinas/turmas), ADMIN (acesso total). Avalie
+     se esse conjunto cobre os fluxos do PRD antes de fechar.
+   - Configurar o realm como código (arquivo de export/import JSON versionado no repositório,
+     carregado automaticamente no `docker compose up` via o próprio Keycloak) — não é
+     aceitável depender de configuração manual na UI do Keycloak para o projeto ser
+     reproduzível, conforme exigido pelo PRD.
+   - No Spring Boot: decidir entre `spring-boot-starter-oauth2-client` (já presente no
+     pom.xml) e `spring-boot-starter-oauth2-resource-server`. Avalie qual é o correto para
+     uma API REST que valida Bearer tokens emitidos pelo Keycloak (chamada por um frontend
+     separado), e registre essa decisão — inclusive se isso significa trocar ou adicionar
+     dependência no pom.xml.
+   - Autorização de endpoint por papel via `@PreAuthorize("hasRole('...')")` ou equivalente
+     baseado em SecurityFilterChain, com um endpoint de exemplo (pode ser
+     `/actuator/health` autenticado ou um endpoint placeholder) demonstrando o mecanismo
+     funcionando ponta a ponta com um token real emitido pelo Keycloak.
+
+2. ABAC (Attribute-Based Access Control) — mecanismo, não regras finais
+   - Definir e implementar o PADRÃO de como regras de posse/atributo serão expressas no
+     código (ex: `@PreAuthorize` com SpEL chamando um bean de autorização customizado, ou
+     um `PermissionEvaluator` dedicado) — decida e registre a abordagem, considerando
+     testabilidade e legibilidade para quem for revisar o código na entrevista.
+   - Documentar na spec, como especificação para a Fase 2, as regras ABAC que existirão no
+     domínio real (ex: "aluno só pode consultar/cancelar a própria matrícula", "secretaria
+     só pode gerenciar turmas de cursos sob sua responsabilidade, se essa granularidade for
+     adotada") — sem implementá-las ainda, apenas para não perder o desenho.
+   - Implementar um exemplo funcional e testado do mecanismo sobre um recurso que já existe
+     nesta fase (ex: um endpoint de perfil do usuário autenticado, "usuário só pode ver o
+     próprio perfil") — isso prova que o mecanismo funciona e dá um padrão de teste a
+     reaproveitar quando as regras reais (Fase 2) forem plugadas.
+
+3. Tratamento de erro de autorização
+   - Resposta padronizada para 401 (não autenticado) vs 403 (autenticado mas sem permissão)
+     — não confundir os dois, isso é frequentemente citado em critério de qualidade de API.
+
+FORA DO ESCOPO desta etapa: qualquer regra de posse sobre Aluno/Curso/Turma/Matrícula (fica
+para quando essas entidades existirem, na Fase 2) e qualquer configuração de Authorization
+Services do próprio Keycloak (UMA/policies no Keycloak) — a menos que a decisão do item 2
+aponte para essa direção em vez de um PermissionEvaluator no Spring; se for esse o caso,
+registre a mudança de abordagem antes de implementar.
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/003-seguranca-rbac-abac.md a partir do template, cobrindo os itens acima —
+   inclua explicitamente a seção "regras ABAC previstas para a Fase 2" como especificação,
+   não como implementação.
+2. Levante via skill decision-log, ANTES de implementar: (a) oauth2-client vs
+   oauth2-resource-server; (b) conjunto de papéis RBAC; (c) mecanismo de ABAC
+   (PermissionEvaluator custom vs SpEL direto vs Keycloak Authorization Services); (d)
+   qualquer outra decisão não-trivial identificada.
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide manualmente: obtenha um token do Keycloak para cada papel (via docker compose já
+   de pé), confirme que RBAC bloqueia corretamente por papel e que o exemplo de ABAC bloqueia
+   corretamente por posse (usuário A não consegue acessar recurso de usuário B).
+5. Escreva teste de integração automatizado para o exemplo de ABAC e para pelo menos um
+   caso de RBAC (autorizado e não-autorizado) — esse teste deve servir de modelo para os
+   testes de ABAC reais da Fase 2.
+6. Rode code-reviewer e security-auditor sobre a configuração de segurança — atenção
+   especial a: secret do client Keycloak não hardcoded, validação de assinatura/expiração
+   do JWT, se o realm export versionado no repo não contém segredos de produção reais, e se
+   mensagens de erro 401/403 não vazam detalhes internos (stack trace, nomes de tabela etc.).
+7. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

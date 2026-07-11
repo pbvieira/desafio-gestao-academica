@@ -1,0 +1,65 @@
+{
+  "title": "Gestão - JVM & HTTP (básico)",
+  "uid": "gestao-jvm-http",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "JVM heap usado (bytes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+          "expr": "sum(jvm_memory_used_bytes{application=\"gestao\", area=\"heap\"}) by (id)",
+          "legendFormat": "{{id}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Requisições HTTP / s",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+          "expr": "sum(rate(http_server_requests_seconds_count{application=\"gestao\"}[1m])) by (uri, status)",
+          "legendFormat": "{{uri}} ({{status}})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Uptime do processo (s)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+          "expr": "process_uptime_seconds{application=\"gestao\"}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "CPU do sistema (%)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+          "expr": "system_cpu_usage{application=\"gestao\"} * 100"
+        }
+      ]
+    }
+  ]
+}
