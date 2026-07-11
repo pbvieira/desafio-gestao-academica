@@ -50,6 +50,8 @@ PostgreSQL + Flyway, Redis, RabbitMQ, Keycloak, Prometheus + Grafana + Jaeger + 
 
 ## Documentação
 
+- `docs/ROADMAP.md` — planejamento em fases feito antes de começar, e como a execução real
+  divergiu desse plano (material de apoio para a entrevista técnica).
 - `docs/DECISIONS.md` — log de decisões técnicas (o que foi decisão deliberada vs. default
   aceito da IA).
 - `specs/` — spec de cada fase do desenvolvimento.
