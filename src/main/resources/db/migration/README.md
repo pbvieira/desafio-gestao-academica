@@ -1,12 +1,8 @@
-Nenhuma migration ainda. A Fase 1 (`specs/001-infraestrutura-base.md`) cobre só a
-infraestrutura — banco, cache/sessão, mensageria e identidade — e decidiu deliberadamente
-não criar nenhuma tabela de domínio nem tabela auxiliar "de preenchimento" sem necessidade
-concreta (ver seção 4 da spec). Este diretório existe apenas para o Flyway reconhecer a
-location `classpath:db/migration` e criar a `flyway_schema_history` no schema `public`
-(D005) já nesta fase — validado subindo a aplicação de fato.
-
-A primeira migration real (`V1__...`) entra na Fase 2, junto da criação das entidades de
-domínio (Aluno, Curso, Disciplina, Turma, Matrícula).
+A Fase 1 (`specs/001` a `specs/004`) cobriu só infraestrutura — banco, cache/sessão,
+mensageria e identidade — sem nenhuma tabela de domínio (ver `specs/001-infraestrutura-base.md`,
+seção 4). As primeiras migrations reais (`V1`–`V5`) entraram na spec 005 (domínio base:
+Aluno, Curso, Disciplina, `curso_disciplina`, Turma) — Matrícula ainda não existe, fica
+para a spec da Fase 3.
 
 ## Convenção de nomenclatura (D015 em docs/DECISIONS.md)
 

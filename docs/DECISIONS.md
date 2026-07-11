@@ -37,6 +37,11 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D015 — Pasta única `db/migration` para todos os módulos](#d015)
 - [D016 — `type` (URI/URN) + propriedade `errorCode` no ProblemDetail](#d016)
 - [D017 — Ponte de logs via arquivo (não appender direto) para o Promtail alcançar a app](#d017)
+- [D018 — Mapeamento DTO↔entidade manual, sem MapStruct](#d018)
+- [D019 — Soft delete (campo `ativo`) para Aluno/Curso/Disciplina/Turma](#d019)
+- [D020 — Disciplina compartilhada entre Cursos (N:N), Turma com FK direto para Curso e Disciplina](#d020)
+- [D021 — Leitura de Curso/Disciplina/Turma aberta a qualquer autenticado](#d021)
+- [D022 — Modelagem menor: status de Turma, unicidade, vínculo Aluno↔Keycloak](#d022)
 
 ---
 
@@ -670,3 +675,226 @@ só no conteúdo da linha): promovê-los a label do Loki cria uma série por val
 e como `/actuator/health`/`/actuator/prometheus` são públicos, qualquer cliente não autenticado poderia
 gerar esse volume — um vetor de esgotamento de recursos no Loki. A correlação log→trace no Grafana usa
 `derivedFields` (regex sobre o conteúdo da linha, não sobre labels), então a funcionalidade não foi afetada.
+
+---
+
+<a id="d018"></a>
+## D018 — Mapeamento DTO↔entidade manual, sem MapStruct
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** Entidades JPA não podem vazar pela API (CLAUDE.md) — era preciso decidir a estratégia de
+conversão entidade↔DTO para as 4 entidades de domínio (Aluno, Curso, Disciplina, Turma), sob prazo apertado
+(entrega segunda-feira).
+
+**Alternativas consideradas:**
+- **MapStruct** — gera mappers em tempo de compilação, elimina boilerplate manual; exige coexistir com o
+  Lombok já em uso (precisa de `lombok-mapstruct-binding`, ordem correta de annotation processors no
+  `pom.xml`) — risco de integração real sob prazo apertado, para um ganho pequeno dado que são só 4
+  entidades com DTOs simples (poucos campos, sem aninhamento profundo).
+- **Mapeamento manual** — métodos de conversão simples, sem dependência nova, sem risco de integração,
+  fácil de revisar em code review. Repetitivo entre as 4 entidades, mas o volume é pequeno.
+
+**Decisão:** Mapeamento manual.
+
+**Justificativa:** Sob prazo apertado, elimina qualquer risco de configuração de build (novo annotation
+processor) para um ganho de produtividade pequeno neste volume de DTOs — o tempo economizado com MapStruct
+seria consumido de volta se a integração com o Lombok desse qualquer problema.
+
+**Trade-offs aceitos:** Repetição de código de mapeamento entre as 4 entidades — aceitável no volume atual;
+revisitar se o número de entidades/DTOs crescer muito nas próximas fases.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se a Fase 3 (Matrícula) e além adicionarem
+muitas outras entidades com DTOs, reavaliar MapStruct com mais tempo disponível.
+
+---
+
+<a id="d019"></a>
+## D019 — Soft delete (campo `ativo`) para Aluno/Curso/Disciplina/Turma
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** O PRD exige exclusão como um dos 4 verbos de CRUD para Aluno/Curso/Disciplina/Turma. Era
+preciso decidir se "excluir" remove a linha de verdade (hard delete) ou apenas marca o registro como
+inativo (soft delete) — decisão com implicação direta em como a Fase 3 (Matrícula, que referencia Turma via
+FK) vai lidar com uma Turma "excluída" que já tem matrícula.
+
+**Alternativas consideradas:**
+- **Hard delete** — `DELETE` real na linha; mais simples agora, mas quebra na Fase 3 assim que uma Turma
+  com matrícula precisar ser "excluída" (FK apontando para registro inexistente, ou seria necessário
+  bloquear a exclusão nesse caso específico) — e perde histórico.
+- **Soft delete** (campo booleano `ativo`) — excluir marca `ativo=false` em vez de remover a linha;
+  preserva integridade referencial e histórico; mesmo padrão nas 4 entidades por consistência.
+
+**Decisão:** Soft delete via campo booleano `ativo` (não timestamp `excluidoEm` — mais simples, suficiente
+para "está ativo ou não").
+
+**Justificativa:** Elimina de saída o problema de FK quebrada que o hard delete geraria na Fase 3, sem
+custo de implementação adicional relevante agora.
+
+**Trade-offs aceitos:** Toda consulta de listagem precisa filtrar `ativo=true` explicitamente (não é
+automático); repositórios precisam disso desde já para não vazar registros "excluídos" nas listagens.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d020"></a>
+## D020 — Disciplina compartilhada entre Cursos (N:N), Turma com FK direto para Curso e Disciplina
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo (contrariando o default sugerido pela IA)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** Era preciso decidir a cardinalidade entre Curso, Disciplina e Turma — o PRD não especifica.
+
+**Alternativas consideradas:**
+- **Disciplina pertence a 1 Curso** — `Curso 1:N Disciplina 1:N Turma`, sem tabela de junção; Turma
+  referencia só Disciplina, Curso fica acessível de forma transitiva. Mais simples, sem migration extra.
+- **Disciplina compartilhada entre Cursos (N:N)** — mais realista (ex: "Cálculo I" comum a Engenharia e
+  Física); exige tabela de junção `curso_disciplina`, e Turma passa a precisar de FK direto para Curso E
+  Disciplina (para saber "turma desta disciplina, dentro deste curso específico").
+
+**Decisão (do Pablo, contrariando o default sugerido pela IA):** Disciplina compartilhada entre Cursos
+(N:N); Turma com FK direto para `curso_id` e `disciplina_id`.
+
+**Justificativa (do Pablo):** Modelagem mais próxima da realidade de um sistema acadêmico — uma disciplina
+genuinamente pode ser oferecida em mais de um curso.
+
+**Implementação:** tabela de junção `curso_disciplina` (FK para `curso` e `disciplina`); `Turma` com
+`curso_id` e `disciplina_id` como FKs diretos; regra de negócio nova (registrada como parte desta decisão,
+não uma entrada separada): criar uma Turma exige que o par `(curso_id, disciplina_id)` já exista em
+`curso_disciplina` — validado no service, retornando 409 (`ConflitoRegraNegocioException`, D016) se a
+disciplina não estiver de fato associada àquele curso.
+
+**Trade-offs aceitos:** Mais uma tabela e mais uma migration sob prazo apertado; mais uma validação de
+negócio a testar (par curso/disciplina inválido).
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d021"></a>
+## D021 — Leitura de Curso/Disciplina/Turma aberta a qualquer autenticado
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração (opção recomendada, confirmada pelo usuário entre
+alternativas explícitas, sem justificativa adicional própria)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** Era preciso decidir o RBAC de leitura (`GET`) dos endpoints de Curso/Disciplina/Turma — se
+`ALUNO` tem acesso já nesta fase, ou só quando Matrícula (Fase 3) definir o que ele precisa ver.
+
+**Alternativas consideradas:**
+- **Leitura restrita a SECRETARIA/ADMIN por agora** — mais conservador, mas exige revisitar o RBAC desses
+  3 controllers na Fase 3, quando o aluno precisar navegar turmas disponíveis para se matricular.
+- **Leitura aberta a qualquer autenticado** (`ALUNO`/`SECRETARIA`/`ADMIN`); escrita (criar/editar/excluir)
+  continua restrita a `SECRETARIA`/`ADMIN`.
+
+**Decisão:** Leitura aberta a qualquer autenticado.
+
+**Justificativa:** Evita reabrir e re-testar o RBAC desses 3 controllers na Fase 3 — o aluno precisará
+navegar turmas disponíveis para se matricular, então essa necessidade já é conhecida agora.
+
+**Trade-offs aceitos:** Nenhum identificado — escrita continua protegida, e não há dado sensível em
+Curso/Disciplina/Turma que justifique restringir leitura.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d022"></a>
+## D022 — Modelagem menor: status de Turma, unicidade, vínculo Aluno↔Keycloak
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, decidido durante a implementação sem levantar como pergunta separada (baixo
+risco/baixa ambiguidade, sinalizado na spec para o usuário revisar, não bloqueante)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** Um conjunto de decisões de modelagem menores, agrupadas aqui para não inflar o log com
+entradas triviais (skill decision-log):
+
+- **Status de Turma:** enum (`StatusTurma { ABERTA, FECHADA }`) em vez de booleano — mesmo padrão já usado
+  para o status de Matrícula (`PENDENTE`/`CONFIRMADA`/`CANCELADA`, PRD §02), mais extensível que um booleano
+  se novos estados surgirem depois (ex: `EM_ANDAMENTO`, `ENCERRADA`), sem precisar reinterpretar um campo
+  booleano existente.
+- **Unicidade:** `Curso.codigo` único; `Disciplina.codigo` único globalmente (é um item de catálogo
+  compartilhável agora, D020); `Turma.codigo` único dentro do par `(curso_id, disciplina_id)`.
+- **Regra de negócio implícita:** não é possível inativar (soft delete) um Curso com Disciplina ativa
+  vinculada via `curso_disciplina`, nem inativar uma Disciplina com Turma ativa vinculada — evita órfãos
+  lógicos sob um "pai" inativo. Erro 409 (`ConflitoRegraNegocioException`, D016).
+- **Vínculo Aluno↔Keycloak (executa D006):** a migration que cria `Aluno` já inclui a coluna
+  `keycloak_subject_id` (nullable, unique) prevista em D006 ("mapeamento adiado para quando Aluno
+  existir") — evita uma migration adicional na Fase 3. Nenhum código consome essa coluna ainda (sem
+  self-service de aluno nesta fase, D021 cobre só leitura de Curso/Disciplina/Turma).
+
+**Decisão:** Conforme detalhado acima.
+
+**Justificativa:** Escolhas de baixo risco, consistentes com padrões já estabelecidos no projeto
+(enum de status como em Matrícula; execução de D006 já planejada); agrupadas para não fragmentar o log.
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o usuário discordar de alguma dessas
+escolhas específicas ao revisar a spec, ajustar antes da implementação.
+
+---
+
+<a id="d023"></a>
+## D023 — Correções decorrentes do code-reviewer/security-auditor da spec 005
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA — achados de review, corrigidos sem levantar como pergunta separada (correção
+de bug/robustez, não decisão com alternativas razoáveis em aberto)
+**Spec relacionada:** specs/005-dominio-base.md
+**Contexto:** `code-reviewer` e `security-auditor` (etapas 7/8 do fluxo do CLAUDE.md) revisaram o diff
+completo da spec 005 em paralelo. Convergiram no mesmo achado principal (divergindo só na severidade
+atribuída) e o `code-reviewer` levantou mais 4 achados menores. Resumo e resolução:
+
+1. **[Divergência de severidade: HIGH para o code-reviewer, LOW para o security-auditor] `desvincularDisciplina`
+   sem guarda contra `Turma` vinculada ao par.** A remoção da linha em `curso_disciplina` violava a FK
+   composta de `turma` (V5) quando havia Turma (ativa ou inativa) referenciando aquele par
+   `(curso_id, disciplina_id)` — `GlobalExceptionHandler` não trata `DataIntegrityViolationException`, então
+   a requisição vazava um 500 genérico em vez do 409 de negócio usado em todo o resto da API. Sem
+   exploração de segurança (sem vazamento de dado, sem bypass de autorização — daí a divergência de
+   severidade), mas viola diretamente a exigência de tratamento de erro padronizado do PRD/CLAUDE.md.
+   **Corrigido:** novo método `TurmaRepository.existsByCursoIdAndDisciplinaId` (sem filtro `ativo=true` —
+   mesmo uma Turma inativada mantém a linha física, então ainda bloqueia a FK), checado em
+   `CursoService.desvincularDisciplina` antes da remoção, lançando `ConflitoRegraNegocioException` (409).
+   Teste novo: `CursoServiceTest#desvincularDisciplina_comTurmaVinculadaAoPar_lancaConflito`. Validado
+   também ponta a ponta com token real (retornou 409 com `ProblemDetail` correto, não 500).
+2. **[MEDIUM, code-reviewer] Unicidade case-sensitive em `Aluno.email`/`Curso.codigo`/`Disciplina.codigo`.**
+   `existsByEmail`/`existsByCodigo` e as constraints `UNIQUE` do banco são case-sensitive; nada normalizava
+   o valor antes de comparar/persistir, permitindo duplicados de fato (ex: `"ana@x.com"` e `"Ana@X.com"`,
+   `"ADS"` e `"ads"`). **Corrigido:** normalização na borda do service — email: `trim().toLowerCase()`;
+   código (Curso/Disciplina/Turma, mesma classe de problema): `trim().toUpperCase()` — antes de checar
+   unicidade e antes de persistir. Validado ponta a ponta com token real (`"caseins"` seguido de `"CASEINS"`
+   → 409).
+3. **[MEDIUM/LOW, code-reviewer] N+1 ao listar Turma.** `Turma.curso`/`Turma.disciplina` são `LAZY` e
+   acessados no mapeamento do controller (fora da transação do service) — funcionava só por depender do
+   default `spring.jpa.open-in-view=true` (não desabilitado neste projeto), e gerava 1+2N selects por
+   listagem. **Corrigido:** `@EntityGraph(attributePaths = {"curso", "disciplina"})` em
+   `TurmaRepository.findByAtivoTrue()`/`findByIdAndAtivoTrue()`.
+4. **[LOW, code-reviewer] Status HTTP implícito em `POST /api/cursos/{id}/disciplinas/{disciplinaId}`.**
+   Único `POST` das 4 controllers sem `@ResponseStatus` explícito (caía no default 200 do Spring MVC, por
+   não criar um recurso novo no sentido REST — mas sem declarar isso, lia como descuido, não decisão).
+   **Corrigido:** `@ResponseStatus(HttpStatus.OK)` explícito.
+5. **[LOW, code-reviewer, não corrigido — risco documentado] `Curso`/`Disciplina` sem `equals`/`hashCode`
+   customizado, usadas como elementos de `Set` (`@ManyToMany`).** Hoje não é um bug observável: toda
+   manipulação do `Set<Disciplina>` acontece dentro de uma única transação/sessão, com identidade de objeto
+   Java garantida pelo persistence context do Hibernate. Vira um problema latente só se uma entidade dessas
+   for usada em um `Set` fora desse contexto (ex: entidades vindas de duas queries/sessões diferentes).
+   **Decisão: não corrigir agora.** O padrão recomendado (equals baseado em id, com fallback de identidade
+   para entidades transientes) tem armadilhas conhecidas (hashCode mutável se a entidade for adicionada a um
+   `HashSet` antes de persistir) e a Lombok `@EqualsAndHashCode` simples não cobre isso corretamente — o
+   custo de acertar essa implementação sob o prazo apertado desta fase não se justifica para um risco que
+   não é hoje alcançável por nenhum caminho de código existente. Fica como risco conhecido para revisitar
+   se/quando entidades `academico` passarem a atravessar sessões (ex: cache de segundo nível, eventos
+   assíncronos carregando entidades destacadas).
+
+**Trade-offs aceitos:** Item 5 foi conscientemente deixado sem correção (ver justificativa acima) —
+não é uma omissão, é uma escolha explícita de escopo sob prazo.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Revisitar o item 5 se `academico` passar a
+usar cache de segundo nível do Hibernate ou entidades atravessarem múltiplas sessões/serialização.

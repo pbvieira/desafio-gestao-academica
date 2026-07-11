@@ -1,0 +1,14 @@
+package br.com.desafio.tecnico.gestao.academico.dto;
+
+import java.time.Instant;
+
+import br.com.desafio.tecnico.gestao.academico.domain.Disciplina;
+
+public record DisciplinaResponse(Long id, String codigo, String nome, boolean ativo, Instant criadoEm) {
+
+	public static DisciplinaResponse de(Disciplina disciplina) {
+		return new DisciplinaResponse(disciplina.getId(), disciplina.getCodigo(), disciplina.getNome(),
+				disciplina.isAtivo(), disciplina.getCriadoEm());
+	}
+
+}
