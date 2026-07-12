@@ -85,18 +85,19 @@ não são decisão do subagent.
 
 ## 6. Critérios de aceite
 
-- [ ] Todas as telas existentes renderizam com os novos tokens (navy/dourado/serifada), sem regressão
+- [x] Todas as telas existentes renderizam com os novos tokens (navy/dourado/serifada), sem regressão
   visual quebrada (overflow, contraste ilegível, texto sobreposto).
-- [ ] Sidebar substitui o header horizontal; os mesmos itens de navegação de hoje continuam acessíveis,
-  agrupados nas 3 seções, cada um condicionado ao mesmo papel de antes.
+- [x] Sidebar substitui o header horizontal; os mesmos itens de navegação de hoje continuam acessíveis,
+  agrupados em 2 seções (Acadêmico, Minha conta — ver nota abaixo), cada um condicionado ao mesmo papel
+  de antes.
 - [x] ~~Seção "Administração" aparece na sidebar só para ADMIN (mesmo sem nenhum item funcional dentro
   dela ainda...)~~ — **revertido durante a execução (D046, refinamento 2026-07-12):** a seção não é criada
   nesta spec, para não deixar um item de navegação sem rota real por trás; a spec 010 cria a seção e o
   item juntos, como uma unidade.
-- [ ] `.badge`/status pill, `.banner`, `.loading`, estado vazio de tabela seguem o novo estilo em pelo
+- [x] `.badge`/status pill, `.banner`, `.loading`, estado vazio de tabela seguem o novo estilo em pelo
   menos Turma, Aluno e Matrícula (telas com mais uso desses padrões).
-- [ ] Nenhum teste unitário de service quebra (esta tarefa não toca lógica, só template/CSS).
-- [ ] `ng build` e `ng test` continuam passando.
+- [x] Nenhum teste unitário de service quebra (esta tarefa não toca lógica, só template/CSS).
+- [x] `ng build` e `ng test` continuam passando.
 
 ## 7. Plano de testes
 
@@ -118,13 +119,73 @@ isso o teste mais valioso é a validação manual por papel, não um teste autom
 
 ## 9. Definition of Done desta tarefa
 
-- [ ] Critérios de aceite (seção 6) atendidos
-- [ ] Testes da seção 7 implementados e passando
-- [ ] Cobertura ≥ 80% no módulo afetado — N/A nesta tarefa (sem lógica nova); build/lint verde é o gate
+- [x] Critérios de aceite (seção 6) atendidos
+- [x] Testes da seção 7 implementados e passando
+- [x] Cobertura ≥ 80% no módulo afetado — N/A nesta tarefa (sem lógica nova); build/lint verde é o gate
   real
-- [ ] `docs/DECISIONS.md` atualizado com D044 e D046
-- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados
-- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados
-- [ ] Esta spec atualizada para refletir o que foi de fato implementado
-- [ ] `./mvnw clean verify` passando (não deveria ser afetado por esta tarefa, mas roda-se para confirmar)
-- [ ] README atualizado se a estrutura de navegação documentada nele (se houver) tiver mudado
+- [x] `docs/DECISIONS.md` atualizado com D044 e D046
+- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados (pendente — revisão
+  final de branch, ver seção 10)
+- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados (pendente — ver
+  seção 10)
+- [x] Esta spec atualizada para refletir o que foi de fato implementado
+- [x] `./mvnw clean verify` passando (não afetado por esta tarefa — 136/136 testes, `BUILD SUCCESS`,
+  confirmado na validação)
+- [x] README atualizado se a estrutura de navegação documentada nele (se houver) tiver mudado — N/A, o
+  README não descreve a estrutura de navegação em detalhe
+
+## 10. Validação manual
+
+Executada com a stack local completa e real: `docker compose up -d`, `./mvnw spring-boot:run` (backend,
+:8080) e `ng serve` (frontend, :4200). Validação do papel/sidebar via um script Playwright (Chromium
+headless, não commitado — ferramenta de validação, mesmo padrão já usado na spec 008) fazendo login real
+via Keycloak (Authorization Code, grant de senha direta do client `gestao-frontend`) como cada um dos 3
+usuários de teste e inspecionando o DOM renderizado.
+
+**Execução (login real, não mockado):**
+
+```
+=== aluno.teste (esperado: ALUNO) ===
+nav-user: nome="Aluno Teste" papel-exibido="ALUNO"
+seções encontradas: [{"label":"Minha conta","items":["Turmas","Minhas matrículas","Meu perfil"]}]
+seção "Administração" presente? false
+OK: nenhum erro de console.
+
+=== secretaria.teste (esperado: SECRETARIA) ===
+nav-user: nome="Secretaria Teste" papel-exibido="SECRETARIA"
+seções encontradas: [{"label":"Acadêmico","items":["Turmas","Cursos","Disciplinas","Alunos"]}]
+seção "Administração" presente? false
+OK: nenhum erro de console.
+
+=== admin.teste (esperado: ADMIN) ===
+nav-user: nome="Admin Teste" papel-exibido="ADMIN"
+seções encontradas: [{"label":"Acadêmico","items":["Turmas","Cursos","Disciplinas","Alunos"]}]
+seção "Administração" presente? false
+OK: nenhum erro de console.
+
+==> TODAS AS VERIFICAÇÕES PASSARAM
+```
+
+Confirma exatamente o esperado: ALUNO só vê "Minha conta"; SECRETARIA e ADMIN só veem "Acadêmico" (ainda
+sem diferenciação entre os dois, D011); nenhum papel vê "Administração" (deferida para a spec 010); zero
+erros de console em qualquer um dos 3 logins.
+
+**Gate de build/teste:**
+- Frontend: `ng build` — `Application bundle generation complete`, sem erros. `ng test
+  --browsers=ChromeHeadless --watch=false` — `23/23 SUCCESS` (mesmo número de antes da tarefa, nenhum
+  teste novo, nenhum quebrado).
+- Backend: `./mvnw clean verify` — `Tests run: 136, Failures: 0, Errors: 0`, gate JaCoCo cumprido,
+  `BUILD SUCCESS` (não deveria ser afetado por uma tarefa só de frontend — confirmado que não foi).
+
+### Achados durante a execução (Task 1/2 do plano) e correções
+
+1. **`.badge-pendente` usava `--gold` em vez de `--warn`** — achado do `task-reviewer` na Task 1: contradizia
+   a própria justificativa de D044 (dourado nunca deveria carregar semântica de aviso). Corrigido após
+   confirmação do Pablo.
+2. **Divergência entre o plano e D046/este documento sobre a seção "Administração"** — achado do
+   `task-reviewer` na Task 2: o plano deferiu a seção inteira, mas D046 e o critério de aceite 3 (seção 6)
+   ainda diziam que ela deveria existir vazia desde já. Pablo confirmou manter o código (sem a seção) e
+   corrigir os documentos — refletido em D046 e no critério de aceite 3 acima.
+3. **Link "Turmas" incondicional no template antigo** — achado ao mapear os arquivos antes de escrever o
+   plano (não um achado de review): a spec original descrevia "Turmas" só na seção "Acadêmico"; o plano já
+   corrigiu isso duplicando o item nas duas seções, preservando a visibilidade que todo papel já tinha.
