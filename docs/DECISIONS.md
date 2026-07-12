@@ -65,7 +65,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D043 — Sem abstração `CrudService<T>` genérica no frontend](#d043)
 - [D044 — Direção visual "Institucional acadêmico" para o redesign do frontend](#d044)
 - [D045 — Escopo e integração técnica da administração de usuários/papéis](#d045)
-- [D046 — Decisões menores agrupadas: módulo `administracao`, sidebar antecipando o slot, service account do `gestao-backend`](#d046)
+- [D046 — Decisões menores agrupadas: módulo `administracao`, seção Administração da sidebar adiada, service account do `gestao-backend`](#d046)
 
 ---
 
@@ -1797,7 +1797,7 @@ pela própria aplicação (não só reatribuir papel), revisitar o escopo (b)/(c
 ---
 
 <a id="d046"></a>
-## D046 — Decisões menores agrupadas: módulo `administracao`, sidebar antecipando o slot, service account do `gestao-backend`
+## D046 — Decisões menores agrupadas: módulo `administracao`, seção Administração da sidebar adiada, service account do `gestao-backend`
 
 **Data:** 2026-07-12
 **Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento (grupado por baixo risco,

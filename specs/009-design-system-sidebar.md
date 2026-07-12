@@ -20,10 +20,11 @@ fluxo funcional já validado na spec 008.
 - Componentes/classes CSS globais reformuladas (reutilizadas por todas as telas via classe, não
   duplicadas por componente): `.data-table`, `.badge` (migra para pill outline), `button.primary`/
   `.danger`, `.banner`, `.loading`/estado vazio, `.field`/`.field-error`.
-- Novo shell de navegação em `app.html`/`app.ts`/`app.css`: sidebar fixa com 3 seções condicionais a
-  papel — "Acadêmico" (Turmas/Cursos/Disciplinas/Alunos, SECRETARIA/ADMIN), "Minha conta" (Minhas
-  matrículas/Meu perfil, ALUNO), "Administração" (só ADMIN — o item "Usuários e Papéis" em si é entregue
-  na spec 010; esta spec só cria o slot/seção na sidebar).
+- Novo shell de navegação em `app.html`/`app.ts`/`app.css`: sidebar fixa com 2 seções condicionais a
+  papel — "Acadêmico" (Turmas/Cursos/Disciplinas/Alunos, SECRETARIA/ADMIN) e "Minha conta" (Turmas/
+  Minhas matrículas/Meu perfil, ALUNO). **Atualizado durante a execução (D046, refinamento
+  2026-07-12):** a seção "Administração" **não** é criada nesta spec — a spec 010 cria a seção e o item
+  "Usuários e Papéis" juntos, como uma unidade, em vez de esta spec antecipar um slot vazio.
 - Conjunto mínimo de ícones lineares SVG inline (Turmas, Cursos, Disciplinas, Alunos, Administração,
   Sair), reutilizados na sidebar.
 - Aplicação consistente da nova identidade em todas as telas existentes (Turma, Curso, Disciplina, Aluno,
@@ -44,8 +45,8 @@ Nenhuma nova. A navegação continua condicionada exatamente aos papéis já imp
 SECRETARIA/ADMIN, `CurrentUser.temPapel`/`ehSecretariaOuAdmin`) — esta tarefa é puramente de
 apresentação.
 
-- [ ] Nenhuma ação/tela hoje visível para um papel deixa de estar visível para o mesmo papel após o
-  redesign (regressão de navegação é o único risco funcional real desta tarefa).
+- [x] Nenhuma ação/tela hoje visível para um papel deixa de estar visível para o mesmo papel após o
+  redesign (regressão de navegação é o único risco funcional real desta tarefa) — validado na seção 10.
 
 ## 4. Abordagem técnica
 
@@ -81,7 +82,7 @@ não são decisão do subagent.
 | # | Pergunta | Alternativas consideradas | Decisão (link) |
 |---|---|---|---|
 | 1 | Direção visual da nova identidade | SaaS/ERP neutro vs. Institucional acadêmico vs. EdTech vibrante (mockup comparativo) | [D044](../docs/DECISIONS.md#d044) — Institucional acadêmico |
-| 2 | Agrupamento de navegação da sidebar | 3 seções por contexto/papel vs. lista plana com ícones | [D046](../docs/DECISIONS.md#d046) — 3 seções, com slot antecipado para Administração |
+| 2 | Agrupamento de navegação da sidebar | 3 seções por contexto/papel vs. lista plana com ícones | [D046](../docs/DECISIONS.md#d046) — 2 seções ativas (Acadêmico, Minha conta); "Administração" adiada para a spec 010, não antecipada como slot vazio (refinamento durante a execução) |
 
 ## 6. Critérios de aceite
 
