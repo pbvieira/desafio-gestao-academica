@@ -38,7 +38,7 @@ import { AlunoResponse } from '../../shared/models/aluno.model';
       }
       .perfil dt {
         font-weight: 600;
-        color: var(--color-muted);
+        color: var(--muted);
       }
     `,
   ],

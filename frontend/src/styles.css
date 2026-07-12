@@ -1,19 +1,22 @@
 :root {
-  --color-navy: #1b2a5b;
-  --color-navy-hover: #2e4a8f;
-  --color-accent: #e8871e;
-  --color-bg: #f7f8fa;
-  --color-text: #1f2430;
-  --color-border: #d8dce3;
-  --color-surface: #ffffff;
-  --color-danger: #b3261e;
-  --color-danger-bg: #fbe9e7;
-  --color-success: #1e7a34;
-  --color-success-bg: #e6f4ea;
-  --color-muted: #6b7280;
+  --navy: #16264a;
+  --navy-2: #223768;
+  --gold: #a9812f;
+  --bg: #fafaf7;
+  --surface: #ffffff;
+  --border: #e3e1d8;
+  --ink: #1c2230;
+  --muted: #6b6456;
+  --ok: #2f7d5a;
+  --ok-bg: #e7f1eb;
+  --warn: #b4622e;
+  --warn-bg: #f7e9df;
+  --danger: #a6362d;
+  --danger-bg: #f5e4e1;
 
   --font-sans: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --radius: 4px;
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+  --radius: 3px;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -33,19 +36,20 @@ body {
 body {
   font-family: var(--font-sans);
   font-size: 14px;
-  color: var(--color-text);
-  background: var(--color-bg);
+  color: var(--ink);
+  background: var(--bg);
 }
 
 h1,
 h2,
 h3 {
-  color: var(--color-navy);
+  font-family: var(--font-serif);
+  color: var(--navy);
   margin: 0 0 var(--spacing-md);
 }
 
 a {
-  color: var(--color-navy);
+  color: var(--navy-2);
 }
 
 button {
@@ -53,14 +57,14 @@ button {
   font-size: 14px;
   cursor: pointer;
   border-radius: var(--radius);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
   padding: 6px 12px;
 }
 
 button:hover {
-  border-color: var(--color-navy-hover);
+  border-color: var(--navy-2);
 }
 
 button:disabled {
@@ -69,23 +73,24 @@ button:disabled {
 }
 
 button.primary {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--navy);
+  border-color: var(--navy);
   color: #fff;
   font-weight: 600;
 }
 
 button.primary:hover {
-  filter: brightness(0.92);
+  background: var(--navy-2);
+  border-color: var(--navy-2);
 }
 
 button.danger {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 button.danger:hover {
-  background: var(--color-danger-bg);
+  background: var(--danger-bg);
 }
 
 input,
@@ -93,14 +98,14 @@ select {
   font-family: inherit;
   font-size: 14px;
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   width: 100%;
 }
 
 input:focus,
 select:focus {
-  outline: 2px solid var(--color-navy-hover);
+  outline: 2px solid var(--gold);
   outline-offset: 1px;
 }
 
@@ -116,90 +121,109 @@ label {
 }
 
 .field-error {
-  color: var(--color-danger);
+  color: var(--danger);
   font-size: 12px;
   margin-top: var(--spacing-xs);
 }
 
 .banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius);
   margin-bottom: var(--spacing-md);
 }
 
 .banner-error {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-  border: 1px solid var(--color-danger);
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }
 
 .banner-success {
-  background: var(--color-success-bg);
-  color: var(--color-success);
-  border: 1px solid var(--color-success);
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok);
 }
 
+/* Pills de status: outline (borda + texto coloridos, fundo transparente) - D044.
+   `background: currentColor` no ::before herda a cor do modificador sem repetir o hex. */
 .badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 100px;
   font-size: 12px;
   font-weight: 600;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .badge-aberta,
 .badge-confirmada {
-  background: var(--color-success-bg);
-  color: var(--color-success);
+  color: var(--ok);
 }
 
 .badge-fechada,
 .badge-cancelada {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
+  color: var(--danger);
 }
 
 .badge-pendente {
-  background: #fff4e5;
-  color: var(--color-accent);
+  color: var(--gold);
 }
 
-/* Tabela densa estilo ERP (D: identidade visual, seção 2 do pedido de escopo) -
-   reutilizada como classe CSS em todas as listagens, sem um componente Angular
-   genérico envolvendo <table> - mais simples de manter dado o orçamento de tempo
-   apertado desta fase, mesmo resultado visual. */
+/* Tabela densa estilo ERP - cabeçalho deixa de ser navy preenchido (pesado em muitas
+   linhas) e passa a claro com borda inferior - D044. Continua uma classe CSS global
+   reutilizada por todas as listagens, sem componente Angular genérico (D: identidade
+   visual, spec 008). */
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 
 .data-table caption {
   text-align: left;
   font-weight: 600;
-  color: var(--color-navy);
+  font-family: var(--font-serif);
+  color: var(--navy);
   padding: var(--spacing-sm) 0;
 }
 
 .data-table th,
 .data-table td {
-  padding: 6px 10px;
+  padding: 8px 10px;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
 .data-table th {
-  background: var(--color-navy);
-  color: #fff;
+  background: var(--bg);
+  color: var(--muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   position: sticky;
   top: 0;
 }
 
 .data-table tbody tr:hover {
-  background: #eef1fa;
+  background: var(--bg);
 }
 
 .data-table td.actions {
@@ -210,7 +234,7 @@ label {
 
 .data-table .empty {
   text-align: center;
-  color: var(--color-muted);
+  color: var(--muted);
   padding: var(--spacing-lg);
 }
 
@@ -222,6 +246,6 @@ label {
 }
 
 .loading {
-  color: var(--color-muted);
+  color: var(--muted);
   padding: var(--spacing-md) 0;
 }
