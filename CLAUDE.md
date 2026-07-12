@@ -176,7 +176,24 @@ As dependências já escolhidas embutem uma decisão arquitetural: a intenção 
 
 - Observabilidade: logs estruturados, correlation ID ou trace ID, health checks, métricas básicas.
 - Tratamento padronizado de erros/validação em toda a API REST.
-- O README (a ser escrito) deve cobrir: instruções de execução local, instruções de execução via Docker Compose, como rodar os testes, tecnologias escolhidas, como a regra de limite de vagas é protegida, como a concorrência é tratada, como os eventos de domínio são publicados/consumidos, como falhas de mensageria são tratadas, mecanismos de observabilidade e uso/divulgação de ferramentas de IA.
+- **Pré-requisito obrigatório do README** — qualquer tarefa que altere algo coberto pelos pontos abaixo
+  (novo papel, nova credencial, novo serviço de observabilidade, mudança de porta/endpoint) deve atualizar
+  o README na mesma tarefa, não depois. O README precisa cobrir, no mínimo:
+  - Instruções de execução local e via Docker Compose (incluindo o profile `observability`).
+  - Como rodar os testes (unitários, integração, e2e) e a cobertura exigida.
+  - Tecnologias escolhidas; como a regra de limite de vagas é protegida e como a concorrência é tratada.
+  - Como os eventos de domínio são publicados/consumidos e como falhas de mensageria são tratadas.
+  - **Frontend:** como instalar e rodar o Angular localmente (comando, porta, arquivo de
+    ambiente/`environment.ts` e como ele localiza a API e o Keycloak).
+  - **Observabilidade — como acessar, não só o que existe:** URL e credenciais de Grafana (com o
+    dashboard provisionado), Prometheus e Jaeger UI; formato e localização dos logs estruturados
+    (correlation/trace ID); quais endpoints do Actuator estão expostos e como autenticar nos protegidos
+    (ex: Basic Auth do `/actuator/prometheus`).
+  - **Autenticação/Keycloak:** URL e credenciais do console admin; realm e clients configurados; uma
+    tabela de usuários de teste (usuário/senha/papel) com o que cada papel RBAC/ABAC pode efetivamente
+    fazer na API/UI — deixando explícito que são credenciais de desenvolvimento, válidas só no ambiente
+    local do `compose.yaml`.
+  - Uso/divulgação de ferramentas de IA.
 - Espera-se também um documento arquitetural curto cobrindo decisões, trade-offs, riscos conhecidos e caminho de evolução, junto com o README — **esse documento pode (e deve) puxar diretamente de `docs/DECISIONS.md`**, que é mais granular e serve de fonte primária.
 
 ## Observações

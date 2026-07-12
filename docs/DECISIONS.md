@@ -42,6 +42,27 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D020 — Disciplina compartilhada entre Cursos (N:N), Turma com FK direto para Curso e Disciplina](#d020)
 - [D021 — Leitura de Curso/Disciplina/Turma aberta a qualquer autenticado](#d021)
 - [D022 — Modelagem menor: status de Turma, unicidade, vínculo Aluno↔Keycloak](#d022)
+- [D023 — Correções decorrentes do code-reviewer/security-auditor da spec 005](#d023)
+- [D024 — Mecanismo de proteção de vaga: UPDATE condicional atômico + `@Version`](#d024)
+- [D025 — Contador de vagas ocupadas: campo incremental, não `COUNT` calculado](#d025)
+- [D026 — Matrícula cancelada permite nova matrícula na mesma turma](#d026)
+- [D027 — Confirmação de matrícula restrita a SECRETARIA/ADMIN](#d027)
+- [D028 — Máquina de estados de Matrícula e resposta a conflito de vaga](#d028)
+- [D029 — Sequenciamento de mensageria: eventos internos via Spring Modulith nesta fase, RabbitMQ na Fase 4](#d029)
+- [D030 — Decisões menores agrupadas: extensão do ABAC, vínculo Aluno↔Keycloak, RBAC de listagem por turma, ferramenta de E2E](#d030)
+- [D031 — Correções decorrentes do code-reviewer/security-auditor da spec 006](#d031)
+- [D032 — Topic exchange para eventos de Matrícula externalizados](#d032)
+- [D033 — Retry: 3 tentativas, TTL fixo de 10s, DLQ nativa do RabbitMQ](#d033)
+- [D034 — Propagação de trace ID via suporte nativo do Spring Boot/AMQP (Observation)](#d034)
+- [D035 — Decisões menores agrupadas: eventId para idempotência, topologia no pacote `config`, observabilidade da DLQ](#d035)
+- [D036 — Biblioteca de autenticação Keycloak no frontend](#d036)
+- [D037 — Gestão de estado no frontend: services + RxJS/Signals, sem NgRx](#d037)
+- [D038 — Estrutura de pastas do frontend por feature](#d038)
+- [D039 — Versão do Angular: 20](#d039)
+- [D040 — "Meu Perfil" do ALUNO via claims do token (superada por D041)](#d040)
+- [D041 — Endpoint `GET /api/alunos/me` para o ALUNO descobrir o próprio `alunoId`](#d041)
+- [D042 — CORS restrito à origem do frontend](#d042)
+- [D043 — Sem abstração `CrudService<T>` genérica no frontend](#d043)
 
 ---
 
@@ -1236,3 +1257,452 @@ checagem em código.
 
 **Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado nos
 itens descartados acima.
+
+---
+
+<a id="d032"></a>
+## D032 — Topic exchange para eventos de Matrícula externalizados
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário (razão já apresentada pelo próprio Pablo ao definir o
+escopo desta fase — só formalizada aqui)
+**Spec relacionada:** specs/007-mensageria-rabbitmq.md
+**Contexto:** Definir a topologia do RabbitMQ (D002) para os eventos `MatriculaCriada`/`Confirmada`/
+`Cancelada` externalizados via `spring-modulith-events-amqp`.
+
+**Alternativas consideradas:**
+- **Topic exchange**, routing key `matricula.criada`/`matricula.confirmada`/`matricula.cancelada` — permite
+  bindings por padrão (`matricula.#` para consumir tudo, ou `matricula.confirmada` para um consumidor
+  futuro interessado só nessa transição), sem tocar no publisher.
+- **Direct exchange**, uma routing key por tipo de evento — mais simples de depurar, mas sem suporte a
+  padrões; um consumidor parcial futuro exigiria saber a lista exata de routing keys.
+
+**Decisão:** Topic exchange (`gestao.eventos`).
+
+**Justificativa:** Extensibilidade sem reabrir o publisher — exatamente o cenário citado no PRD como
+diferencial de mensageria bem desenhada, e a única fila desta fase (`notificacao.matricula`) já usa o
+padrão `matricula.#` para provar o mecanismo sem precisar declarar 3 bindings individuais.
+
+**Trade-offs aceitos:** Nenhum identificado — topic exchange não tem custo de complexidade real sobre
+direct exchange no RabbitMQ.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado.
+
+---
+
+<a id="d033"></a>
+## D033 — Retry: 3 tentativas, TTL fixo de 10s, DLQ nativa do RabbitMQ
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário
+**Spec relacionada:** specs/007-mensageria-rabbitmq.md
+**Contexto:** Definir quantas tentativas o consumidor tem antes de a mensagem ir para a DLQ final, e a
+estratégia de espera entre tentativas (fixo vs. incremental) — pedido explícito do usuário para não deixar
+como omissão.
+
+**Alternativas consideradas:**
+- **3 tentativas, TTL fixo de 10s** — simples de implementar (uma única fila de retry) e de demonstrar/
+  testar sem esperas longas.
+- **5 tentativas, TTL incremental (10s/30s/60s)** — mais realista para produção (dá mais tempo para uma
+  falha transitória se resolver sozinha), mas exige uma fila de retry por nível de TTL e testes mais lentos.
+
+**Decisão:** 3 tentativas, TTL fixo de 10s.
+
+**Justificativa:** Proporcional ao prazo e ao escopo do desafio (não há SLA de produção real a atender);
+backoff incremental e comparação de estratégias de retry ficam fora de escopo aqui, mesmo espírito de D024
+(Fase 3) — simples e correto agora, aprofundamento é Fase 7 se necessário.
+
+**Trade-offs aceitos:** Sob uma falha transitória mais longa que ~30s (3×10s) no total, a mensagem esgota as
+tentativas e vai para a DLQ mesmo que a causa raiz já tivesse se resolvido — aceitável para o escopo deste
+desafio; reprocessamento manual da DLQ é sempre possível (RabbitMQ Management UI).
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se este projeto evoluísse para produção real,
+revisitar com backoff incremental e métricas reais de duração de falha transitória.
+
+---
+
+<a id="d034"></a>
+## D034 — Propagação de trace ID via suporte nativo do Spring Boot/AMQP (Observation)
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário
+**Spec relacionada:** specs/007-mensageria-rabbitmq.md
+**Contexto:** Sem o trace ID da requisição HTTP original propagado até o consumidor, uma mensagem na DLQ
+não é rastreável até a requisição que a gerou — enfraquece a resposta a "como você trata falha de
+mensageria" (PRD/entrevista).
+
+**Alternativas consideradas:**
+- **Suporte nativo do Spring Boot 3/Spring AMQP via Observation**
+  (`spring.rabbitmq.template.observation-enabled=true` + `spring.rabbitmq.listener.observation-enabled=true`)
+  — reaproveita a mesma infraestrutura de Micrometer Tracing já configurada na spec 002, sem código manual.
+- **`MessagePostProcessor` manual lendo o `Tracer` atual** — controle total, garantido de funcionar
+  independente de auto-configuração, mas código extra para manter, reimplementando algo que o Spring Boot 3
+  já tenta cobrir de fábrica.
+
+**Decisão:** Suporte nativo via Observation. **Revisto após verificação empírica (ver "Atualização" abaixo)
+— NÃO é o mecanismo final implementado.**
+
+**Justificativa:** Menos código para manter, mesmo padrão de instrumentação já usado no resto do projeto
+(HTTP, JDBC). Precisa de verificação empírica durante a implementação especificamente para o caminho de
+externalização do Modulith (`@Externalized`) — não há garantia a priori de que o publish passa pelo mesmo
+`RabbitTemplate` instrumentado que um `convertAndSend` direto; se não propagar sozinho, cai para a opção
+manual como fallback documentado, não como retrabalho silencioso.
+
+**Trade-offs aceitos:** Nenhum identificado além do risco de verificação mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se a verificação empírica mostrar que o
+caminho de externalização do Modulith não propaga o trace automaticamente, implementar o
+`MessagePostProcessor` manual como complemento (não substituição) — registrar esse ajuste aqui mesmo, sem
+nova entrada, se acontecer.
+
+**Atualização (verificação empírica, mesma data):** confirmado que a opção nativa NÃO propaga — rodando a
+aplicação real (Postgres/Redis/RabbitMQ/Keycloak + stack de observabilidade via compose), uma linha de log
+disparada por uma requisição HTTP mostra `traceId`/`spanId` normalmente, mas o log do consumidor
+(`MatriculaNotificacaoListener`) não, mesmo com `spring.rabbitmq.template/listener.observation-enabled=true`.
+
+O fallback originalmente cogitado (`MessagePostProcessor` manual no `RabbitTemplate`, lendo
+`tracer.currentSpan()` no momento do publish) **também foi tentado e também falhou** — não é só a
+autoconfiguração de Observation que não cobre esse caminho; qualquer captura feita no momento em que o
+Modulith efetivamente publica para o RabbitMQ falha, porque essa publicação roda de forma assíncrona numa
+thread própria (ex: `task-1`), fora do escopo do `ThreadLocal` de span do Micrometer da requisição HTTP
+original. Confirmado via log de diagnóstico temporário: `tracer.currentSpan()` retornava `null` nessa
+thread, tanto na chamada nativa quanto no customizer manual.
+
+**Mecanismo final implementado:** captura do `traceId` **na própria thread da requisição HTTP**, dentro de
+`MatriculaService` (método privado `traceIdAtual()`, injeta `Tracer` via construtor), no exato ponto de
+cada `eventPublisher.publishEvent(...)` — ou seja, antes de qualquer despacho assíncrono do Modulith
+acontecer. O valor viaja como um campo `traceId` no próprio payload do evento (`MatriculaCriada`,
+`MatriculaConfirmada`, `MatriculaCancelada` — ao lado do `eventId` já existente, D035), não mais como header
+AMQP. O consumidor (`MatriculaNotificacaoListener`) lê esse campo genericamente via `ObjectMapper.readTree`
+(sem amarrar a um tipo de evento específico, já que a routing key só é decidida depois) e coloca em
+`MDC.put("traceId", ...)` antes de despachar para `processarCriada`/`processarConfirmada`/`processarCancelada`,
+removendo do MDC num bloco `finally`. `MensageriaTracingConfig` (o `RabbitTemplateCustomizer` da tentativa
+anterior) foi removido do código — não tinha mais função, e mantê-lo seria código morto que não funciona.
+
+---
+
+<a id="d035"></a>
+## D035 — Decisões menores agrupadas: eventId para idempotência, topologia no pacote `config`, observabilidade da DLQ
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento (grupado por baixo risco,
+mesmo padrão de D022/D028/D030)
+**Spec relacionada:** specs/007-mensageria-rabbitmq.md
+**Contexto:** Conjunto de decisões técnicas menores identificadas ao planejar esta fase, agrupadas para não
+inflar o log:
+
+- **`eventId` (UUID) adicionado aos 3 records de evento** (`MatriculaCriada`/`Confirmada`/`Cancelada`,
+  módulo `academico`) — gerado na criação do evento (em `MatriculaService`), viaja no payload JSON
+  serializado pelo Modulith até o consumidor. Necessário porque nenhum dos 3 records tinha um identificador
+  estável por instância de evento antes desta fase — sem isso, a tabela `evento_processado` (dedupe de
+  idempotência, item explícito do escopo) não tem contra o que comparar. Segue o padrão já referenciado
+  como exemplo no `SKILL.md` de decision-log.
+- **Topologia do RabbitMQ (exchange/filas/bindings) declarada no pacote `config`**
+  (`br.com.desafio.tecnico.gestao.config`), não dentro de `academico` nem de `notificacao` — é contrato
+  compartilhado entre o módulo publicador (via `@Externalized`) e o módulo consumidor (`@RabbitListener`),
+  mesmo padrão já usado para `OpenApiConfig` (configuração cross-cutting, não pertence a nenhum módulo de
+  domínio específico).
+- **Observabilidade da DLQ:** sem endpoint novo — RabbitMQ Management UI (já exposta na Fase 1, D008) é
+  suficiente para inspecionar a fila `notificacao.matricula.dlq` manualmente; complementado por um log
+  estruturado (nível WARN) no momento em que o consumidor decide rotear uma mensagem para a DLQ (após
+  esgotar as 3 tentativas, D033), e um contador Micrometer (`mensageria.dlq.eventos`) para aparecer no
+  Prometheus/Grafana já configurados.
+- **Um único consumidor de referência** (`notificacao.matricula`, bound com `matricula.#`) — conforme já
+  delimitado no escopo desta fase pelo próprio Pablo ("um consumidor de referência é suficiente para provar
+  o mecanismo"), não uma decisão nova.
+- **`spring.rabbitmq.listener.simple.default-requeue-rejected=false`** — obrigatório para o design de retry
+  de D033 funcionar: sem isso, uma exceção no listener faz o RabbitMQ devolver a mensagem para o início da
+  MESMA fila (loop apertado de falha imediata), nunca chegando à fila de espera com TTL. Não é uma decisão
+  com alternativa razoável — é um requisito técnico do desenho já decidido, registrado aqui para não passar
+  despercebido.
+
+**Decisão:** Conforme detalhado acima.
+
+**Justificativa:** Escolhas de baixo risco, consequência direta de decisões já tomadas (D032/D033) ou
+padrões já estabelecidos no projeto (D008 para observabilidade, `OpenApiConfig` para configuração
+cross-cutting).
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:**
+
+- **Rede do compose sem autenticação adicional entre serviços:** qualquer container na mesma rede Docker
+  alcança o RabbitMQ com as credenciais do `.env` (não há mTLS nem segmentação de rede) — aceitável no
+  escopo deste desafio (ambiente de desenvolvimento local), mas exigiria mTLS entre serviços ou rede
+  segmentada em produção. Documentado também em `specs/007-mensageria-rabbitmq.md` §8 e `README.md`
+  ("Mensageria assíncrona"), citado aqui explicitamente (achado de security review: a citação original no
+  README apontava para este D035, mas o risco em si só estava descrito na spec — corrigido para que
+  `docs/DECISIONS.md`, a fonte primária granular de decisões, também contenha o texto do risco, não só a
+  referência a ele).
+- Consequência prática do ponto acima: o console de management do RabbitMQ (porta 15672) concede
+  administração completa do broker (criar/apagar filas, publicar/reenviar mensagens arbitrárias, não só
+  leitura), não apenas inspeção. Achado de security review: essa porta estava publicada sem restrição de
+  interface no `compose.yaml`, inconsistente com todo outro console admin do mesmo arquivo (Keycloak,
+  Grafana, Prometheus, Jaeger, Loki — todos restritos a `127.0.0.1`). Corrigido para seguir o mesmo padrão
+  (`127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672`).
+- Consequência adicional (baixo risco, não corrigida - aceita): como qualquer publisher autenticado no
+  vhost pode setar um header `x-death` arbitrário numa mensagem publicada diretamente (via Management UI ou
+  código), é possível forjar uma mensagem que pareça ter esgotado as 3 tentativas e cai direto na DLQ sem
+  passar pelo fluxo de retry real. Impacto limitado à integridade de métricas/observabilidade (não há perda
+  de dado, escalonamento de privilégio ou execução de código) e já está coberto pelo risco acima (quem
+  alcança o broker já pode publicar/purgar/reenviar mensagens arbitrárias de qualquer forma) - não introduz
+  uma nova superfície.
+- **Duplicação de string literals (exchange/routing keys) entre publicador e consumidor:** achado de code
+  review - `@Externalized` nos records de evento (`academico`) e o `switch` do consumidor
+  (`MatriculaNotificacaoListener`) referenciavam `"gestao.eventos"`/`"matricula.criada"` etc. como literais
+  soltos, sem fonte única. Corrigido: `MensageriaConfig` ganhou constantes
+  `ROUTING_KEY_MATRICULA_CRIADA/CONFIRMADA/CANCELADA`, e os 3 records + o `switch` do consumidor passaram a
+  referenciá-las (`@Externalized` aceita expressão de constante em tempo de compilação, então
+  `MensageriaConfig.EXCHANGE_EVENTOS + "::" + MensageriaConfig.ROUTING_KEY_MATRICULA_CRIADA` é válido).
+
+---
+
+<a id="d036"></a>
+## D036 — Biblioteca de autenticação Keycloak no frontend
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** O frontend Angular precisa autenticar o usuário contra o Keycloak (realm `gestao`, client
+público `gestao-frontend`) antes de consumir a API. Era preciso escolher a biblioteca de integração.
+
+**Alternativas consideradas:**
+- **`angular-oauth2-oidc`** — biblioteca OIDC genérica, não específica do Keycloak; mais flexível para
+  trocar de provedor de identidade no futuro, mas exige montar manualmente convenções que o adapter
+  oficial do Keycloak já resolve prontas.
+- **`keycloak-js` + `keycloak-angular`** — adapter oficial do Keycloak, já resolve Authorization Code +
+  PKCE, refresh de token e leitura de `realm_access.roles` com pouca configuração.
+
+**Decisão:** `keycloak-js` + `keycloak-angular`.
+
+**Justificativa:** Não há requisito de trocar de provedor de identidade neste desafio; o adapter oficial
+reduz código de integração e é o caminho mais direto para PKCE + leitura de papéis RBAC do token.
+
+**Trade-offs aceitos:** Acoplamento à API do Keycloak — trocar de provedor de identidade no futuro
+exigiria reescrever a camada de autenticação do frontend.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado no escopo atual.
+
+**Implementação:** token mantido em memória (não `localStorage`/`sessionStorage`), mitigação de XSS —
+confirmado pelo `security-auditor` (nenhum uso de storage persistente para o token em todo `frontend/src`).
+
+---
+
+<a id="d037"></a>
+## D037 — Gestão de estado no frontend: services + RxJS/Signals, sem NgRx
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** O frontend tem 5 features (Curso, Disciplina, Turma, Aluno, Matrícula) com estado local
+simples (listas, formulário atual, loading/erro) — sem estado compartilhado complexo entre features.
+
+**Alternativas consideradas:**
+- **NgRx** — store centralizada, previsível e testável para estado complexo/compartilhado, mas adiciona
+  boilerplate (actions/reducers/effects/selectors) desproporcional a um estado por feature simples.
+- **Services + RxJS/Signals** — cada feature mantém seu próprio estado via `signal`, exposto pelo
+  service; sem dependência nova, menos código para o mesmo resultado neste escopo.
+
+**Decisão:** Services + RxJS/Signals, sem NgRx.
+
+**Justificativa:** Nenhuma feature desta fase precisa de estado verdadeiramente compartilhado entre
+telas distintas — o custo de configurar e manter uma store NgRx não se paga no tamanho atual da
+aplicação.
+
+**Trade-offs aceitos:** Se o frontend crescer e passar a precisar de estado compartilhado entre muitas
+features (ex: cache global de Turmas), a lógica de sincronização entre services precisaria ser montada
+manualmente em vez de vir de uma store centralizada.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Revisitar NgRx (ou similar) se o número de
+features/estado compartilhado crescer muito além do escopo atual.
+
+---
+
+<a id="d038"></a>
+## D038 — Estrutura de pastas do frontend por feature
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** Era preciso decidir a organização de pastas de `frontend/src/app` — por feature de domínio
+ou espelhando os módulos Modulith do backend (`academico`, `notificacao`, `security`).
+
+**Alternativas consideradas:**
+- **Espelhando os módulos Modulith do backend** — reforça visualmente a simetria com o backend, mas o
+  backend agrupa por contexto delimitado (bounded context), enquanto o frontend agrupa naturalmente por
+  tela/recurso (Curso, Disciplina, Turma, Aluno, Matrícula não mapeiam 1:1 para `academico`/`notificacao`).
+- **Por feature** (`core/`, `shared/`, `features/{curso,disciplina,turma,aluno,matricula}/`) — convenção
+  padrão do ecossistema Angular, alinhada à granularidade real das telas.
+
+**Decisão:** Por feature.
+
+**Justificativa:** A granularidade de tela (Curso/Disciplina/Turma/Aluno/Matrícula) é mais natural para
+organizar componentes/services do que a fronteira de módulo do backend, que representa outro nível de
+abstração (contexto delimitado, não tela).
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado no escopo atual.
+
+---
+
+<a id="d039"></a>
+## D039 — Versão do Angular: 20
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** Era preciso escolher a versão do Angular para o novo projeto `frontend/`.
+
+**Alternativas consideradas:**
+- **Angular 18 (LTS)** — suporte de longo prazo, mais previsível para um projeto de produção real.
+- **Angular 20** — versão mais recente na época da implementação, standalone components como padrão
+  (sem NgModules), sinaliza domínio de recursos atuais do framework — relevante para uma entrevista
+  técnica.
+
+**Decisão:** Angular 20.
+
+**Justificativa:** Este é um desafio técnico avaliado por uma entrevista, não uma aplicação de produção
+de longo prazo — usar a versão mais recente comunica domínio do estado atual do framework sem custo real,
+já que não há uma base de código legada para migrar.
+
+**Trade-offs aceitos:** Menor tempo de maturidade em produção da versão 20 comparado a uma LTS — sem
+relevância prática no escopo deste desafio.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se este projeto evoluísse para produção real
+de longo prazo, reavaliar a política de versão (LTS vs. mais recente).
+
+---
+
+<a id="d040"></a>
+## D040 — "Meu Perfil" do ALUNO via claims do token (superada por D041)
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, decidido durante o planejamento
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** A tela "Meu Perfil" do ALUNO precisa mostrar dados do próprio Aluno, mas nenhum endpoint de
+autoleitura existia na API antes desta fase — só CRUD staff-only (`GET /api/alunos/{id}`, restrito a
+SECRETARIA/ADMIN).
+
+**Alternativas consideradas:**
+- **Claims do token JWT** — usar só os campos já presentes no token do Keycloak (nome, e-mail) sem
+  nenhuma chamada à API; não expõe dados de domínio (ex: data de cadastro) que só existem na tabela
+  `aluno`.
+- **Cortar "Meu Perfil" do escopo** — evita o problema, mas remove uma tela explicitamente pedida pelo
+  PRD (ALUNO consultar seus próprios dados).
+- **Novo endpoint no backend** (`GET /api/alunos/me`) — ver D041.
+
+**Decisão (intermediária, depois superada):** Claims do token, como primeira tentativa de manter o
+escopo desta fase restrito ao frontend, sem tocar no backend.
+
+**Justificativa:** Evitar alterar a API já estabilizada das Fases 2-4 por uma tela nova, se os dados do
+token bastassem.
+
+**Trade-offs aceitos:** Claims do token não incluem dados de domínio (ex: data de cadastro do Aluno na
+tabela `aluno`, distinta da data de criação do usuário no Keycloak) — a tela ficaria incompleta.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Superada por D041 ainda durante esta mesma
+fase, ao ficar claro que o ALUNO também precisa do próprio `alunoId` (não só do nome/e-mail) para poder
+se matricular — ver D041.
+
+---
+
+<a id="d041"></a>
+## D041 — Endpoint `GET /api/alunos/me` para o ALUNO descobrir o próprio `alunoId`
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA, revisada por mim (achado durante a implementação, não previsto no
+planejamento original — ver D040)
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** Ao implementar o fluxo de matrícula do ALUNO, ficou claro que as claims do token (D040) não
+bastam: o ALUNO precisa do próprio `alunoId` (chave da tabela `aluno`, distinta do `sub` do JWT) para
+poder chamar `POST /api/matriculas`. Nenhum endpoint da API resolvia "qual Aluno é este usuário logado".
+
+**Alternativas consideradas:**
+- **Manter só claims do token (D040)** — insuficiente, bloqueia o próprio fluxo de matrícula do ALUNO.
+- **Cortar matrícula do ALUNO do escopo desta fase** — evita mudar o backend, mas remove o fluxo mais
+  citado do PRD (ALUNO se matricula pela própria UI).
+- **Adicionar `GET /api/alunos/me`** — endpoint aditivo mínimo em `academico`, resolve o Aluno a partir
+  do `sub` do JWT (via o vínculo Aluno↔Keycloak já modelado em D022/D030), sem parâmetro manipulável pelo
+  cliente.
+
+**Decisão:** Adicionar `GET /api/alunos/me`.
+
+**Justificativa:** É o único caminho que preserva o fluxo de matrícula do ALUNO (critério mais citado do
+PRD) sem inventar um mecanismo alternativo de descoberta de identidade no frontend.
+
+**Implementação:** endpoint resolve o Aluno unicamente a partir do `sub` do JWT autenticado — nunca
+aceita um `id`/parâmetro externo, então não pode retornar o registro de outro Aluno. Sobrescreve o
+`@PreAuthorize` de classe do controller (staff-only) só para este método.
+
+**Trade-offs aceitos:** Mais um endpoint na API estabilizada das Fases 2-4, fora do plano original desta
+fase de frontend.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado — endpoint coberto por
+teste de integração dedicado (`AlunoControllerIntegrationTest`, achado de code review, ver seção 10 de
+specs/008), incluindo teste de regressão de que o override não vaza para os demais endpoints do
+controller.
+
+---
+
+<a id="d042"></a>
+## D042 — CORS restrito à origem do frontend
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, decidido durante a implementação sem pausar para perguntar (requisito
+técnico descoberto ao validar a spec 008 — sem alternativa razoável)
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** Ao validar o frontend (`ng serve`, origem `http://localhost:4200`) contra a API
+(`http://localhost:8080`), nenhuma chamada funcionava — o backend nunca precisou de CORS antes desta
+fase, porque não existia um consumidor HTTP de outra origem.
+
+**Alternativas consideradas:**
+- **Nenhuma outra alternativa razoável** — CORS restrito à origem real do frontend é o único
+  comportamento correto para um backend que aceita chamadas de um frontend em origem diferente; wildcard
+  (`*`) ou reflexão do header `Origin` foram descartados por exporem a API a qualquer origem.
+
+**Decisão:** `CorsConfigurationSource` no `SecurityConfig`, restrito à origem configurada em
+`app.frontend.origin` (`APP_FRONTEND_ORIGIN`, default `http://localhost:4200`).
+
+**Justificativa:** É um requisito técnico, não uma escolha entre alternativas de mesmo mérito — sem CORS
+configurado, o frontend simplesmente não funciona; com wildcard, a API ficaria aberta a qualquer origem.
+
+**Trade-offs aceitos:** Nenhum identificado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o frontend for servido de uma origem
+diferente em outro ambiente (ex: produção), `APP_FRONTEND_ORIGIN` precisa ser ajustada nesse ambiente.
+
+**Refinamento pós-code-review (2026-07-14):** a propriedade não usava a indireção `${ENV_VAR:...}` já
+padrão no resto do `application.properties` — corrigido para `${APP_FRONTEND_ORIGIN:http://localhost:4200}`,
+documentado em `.env.example`.
+
+---
+
+<a id="d043"></a>
+## D043 — Sem abstração `CrudService<T>` genérica no frontend
+
+**Data:** 2026-07-14
+**Origem:** 🧑 Decisão do Pablo (achado de code review, registrado retroativamente)
+**Spec relacionada:** specs/008-frontend-angular.md
+**Contexto:** Os services/formulários de Curso, Disciplina, Turma e Aluno repetem a mesma estrutura
+(listar, buscar por id, criar, editar, excluir) — o `code-reviewer` apontou a duplicação e perguntou se
+valia a pena extrair uma abstração genérica.
+
+**Alternativas consideradas:**
+- **`CrudService<T>` genérico** — reduziria a repetição entre os 4 services, mas cada recurso tem
+  particularidades (ex: `Turma` depende do par `curso_id`/`disciplina_id`; `Aluno` tem a leitura extra de
+  `/me`, D041) que forçariam a abstração a virar genérica-com-excecões rapidamente.
+- **Sem abstração genérica** — manter os 4 services explícitos, aceitando a repetição.
+
+**Decisão (do Pablo, contrariando o default sugerido pela IA):** sem abstração genérica.
+
+**Justificativa (do Pablo):** Dado o orçamento de tempo restante e o tamanho real do problema (4
+recursos, cada um já com uma particularidade que quebraria uma abstração genérica), o custo de desenhar e
+manter uma abstração correta supera o ganho de remover a duplicação atual.
+
+**Trade-offs aceitos:** Repetição de código entre os 4 services/formulários — aceitável no volume atual;
+revisitar se mais recursos CRUD forem adicionados no futuro.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o número de recursos CRUD crescer muito,
+reavaliar uma abstração genérica com mais tempo disponível.
+

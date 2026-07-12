@@ -41,16 +41,22 @@ ponto do desenvolvimento.
 | Fase | Conteúdo | Status |
 |---|---|---|
 | ~~1~~ | ~~Infra mínima~~ + Keycloak/RBAC-ABAC + observabilidade completa + CI (antecipado da Fase 8 original) | **Concluída** — specs 001-004 |
-| 2 | Domínio: Aluno, Curso, Disciplina, Turma — CRUD completo, camadas, DTOs, validação, testes unitários | Pendente |
-| 3 | Matrícula — fluxo funcional completo (criar/confirmar/cancelar, status, duplicidade, consulta por aluno/turma) com proteção básica de vaga | Pendente |
-| 4 | Mensageria de domínio: publicar `MatriculaCriada`/`Confirmada`/`Cancelada` no RabbitMQ (infraestrutura já de pé desde a Fase 1) + consumidor no módulo secundário + DLQ/retry | Pendente |
-| 5 | Frontend Angular mínimo: telas dos fluxos principais, consumo da API, tratamento de erro | Pendente |
+| 2 | Domínio: Aluno, Curso, Disciplina, Turma — CRUD completo, camadas, DTOs, validação, testes unitários | **Concluída** — specs 005 |
+| 3 | Matrícula — fluxo funcional completo (criar/confirmar/cancelar, status, duplicidade, consulta por aluno/turma) com proteção básica de vaga | **Concluída** — spec 006 |
+| 4 | Mensageria de domínio: publicar `MatriculaCriada`/`Confirmada`/`Cancelada` no RabbitMQ (infraestrutura já de pé desde a Fase 1) + consumidor no módulo secundário + DLQ/retry | **Concluída** — spec 007 |
+| 5 | Frontend Angular mínimo: telas dos fluxos principais, consumo da API, tratamento de erro | **Concluída** — spec 008 |
 | 6 | Testes: completar unit/integration faltantes, e2e dos fluxos principais de negócio, manter cobertura ≥ 80% (gate JaCoCo já ativo desde a Fase 1) | Pendente |
 | 7 | Concorrência aprofundada — estratégia final (otimista/pessimista/constraint), teste de disputa pela última vaga, decisão documentada, resposta de entrevista pronta | Pendente |
-| 8 | Documentação final: completar o `README.md` (já existe uma versão inicial, criada na Fase 1) com uso de IA, decisões técnicas, como a vaga é protegida, como a concorrência é tratada | Pendente |
+| 8 | Documentação final: completar o `README.md` (já existe uma versão inicial, criada na Fase 1) com uso de IA, decisões técnicas, como a vaga é protegida, como a concorrência é tratada | **Concluída** — README com seções de frontend, observabilidade e Keycloak/RBAC |
 
 **Nota para a entrevista:** a inversão de prioridade (diferenciais antes do obrigatório) é
 o tipo de decisão a explicar com transparência, não a esconder — o trade-off e o motivo de
 cada escolha técnica de infraestrutura estão documentados em `docs/DECISIONS.md`. O risco
 prático dessa inversão é orçamento: menos folga do que o planejado para as Fases 2-3-7, que
 são o que efetivamente decide a régua de avaliação do PRD (§06, critérios críticos).
+
+**Nota de reconciliação (2026-07-12):** os status desta tabela estavam desatualizados em relação ao
+código/specs já implementados (Fases 2-5 e 8 concluídas, mas ainda marcadas "Pendente") — corrigido numa
+tarefa de consolidação de documentação. A concorrência aprofundada (Fase 7) já tem mecanismo implementado
+(D024) desde a spec 006; o que resta dessa fase é a resposta de entrevista/documento arquitetural curto
+mencionado no PRD §05, ainda não escrito separadamente do que já existe em `docs/DECISIONS.md`.
