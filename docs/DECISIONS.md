@@ -548,6 +548,29 @@ nativa do Keycloak `${env.KEYCLOAK_BACKEND_CLIENT_SECRET}` (lida do ambiente do 
 sua vez vinda de `.env`), então cada ambiente/clone do repositório tem um valor diferente, não mais o mesmo
 valor idêntico versionado no Git.
 
+**Refinamento — bug latente corrigido ao ganhar o primeiro consumidor real (2026-07-12, specs/010,
+Fase 5c):** o secret finalmente ganhou um consumidor de código (`AdministracaoUsuarioService`, via
+`client_credentials`) — e ao validar a autenticação de ponta a ponta, o placeholder
+`${env.KEYCLOAK_BACKEND_CLIENT_SECRET}` registrado no refinamento anterior nunca havia sido de fato
+exercitado (todo o período anterior, `serviceAccountsEnabled`/`standardFlowEnabled`/
+`directAccessGrantsEnabled` estavam `false`, então nada tentava autenticar com esse secret). Dois problemas
+reais, ambos bloqueadores, encontrados só agora: (1) o resolver de variável de ambiente do próprio Keycloak
+(`AbstractFileBasedImportProvider`) usa o conteúdo entre `${...}` ao pé da letra via `System.getenv(...)` —
+sem remover nenhum prefixo `env.`; a convenção `${env.X}` é do Spring/Quarkus (property sources), não deste
+resolver específico do Keycloak, então o valor nunca resolvia. (2) a substituição de placeholders no
+`--import-realm` só ocorre com a system property JVM `keycloak.migration.replace-placeholders=true`
+(default `false`) — sem ela, o Keycloak importa a string literal `${VAR}` como o próprio valor do campo,
+silenciosamente, sem erro. **Corrigido:** placeholder simplificado para `${KEYCLOAK_BACKEND_CLIENT_SECRET}`
+(sem prefixo) e adicionado `JAVA_OPTS_APPEND=-Dkeycloak.migration.replace-placeholders=true` ao serviço
+`keycloak` em `compose.yaml`. Alternativa descartada: hardcodear o secret real diretamente no JSON
+versionado — violaria a proteção original desta decisão (mesmo valor em texto claro em todo clone do
+repositório) só para contornar o bug, então não foi considerada uma opção razoável. Também concedido, no
+mesmo commit: os client roles `view-users`/`manage-users`/`query-users` de `realm-management` ao service
+account de `gestao-backend`, via o padrão nativo do Keycloak para isso (um usuário sintético
+`service-account-gestao-backend` com `serviceAccountClientId`/`clientRoles` no realm export) — o campo
+`serviceAccountClientRoles` diretamente no client, usado numa primeira tentativa, não existe no schema do
+`ClientRepresentation` do Keycloak.
+
 ---
 
 <a id="d014"></a>
