@@ -1,0 +1,30 @@
+<header class="app-header">
+  <div class="app-header-brand">Gestão de Matrículas</div>
+  <nav class="app-nav">
+    <a routerLink="/turmas" routerLinkActive="active">Turmas</a>
+    @if (currentUser.temPapel('ALUNO')) {
+      <a routerLink="/minhas-matriculas" routerLinkActive="active">Minhas matrículas</a>
+      <a routerLink="/meu-perfil" routerLinkActive="active">Meu perfil</a>
+    }
+    @if (currentUser.ehSecretariaOuAdmin) {
+      <a routerLink="/cursos" routerLinkActive="active">Cursos</a>
+      <a routerLink="/disciplinas" routerLinkActive="active">Disciplinas</a>
+      <a routerLink="/alunos" routerLinkActive="active">Alunos</a>
+    }
+  </nav>
+  <div class="app-header-user">
+    <span>{{ currentUser.nome || currentUser.username }}</span>
+    <button (click)="logout()">Sair</button>
+  </div>
+</header>
+
+@if (errorBanner.mensagem(); as mensagem) {
+  <div class="banner banner-error app-global-banner">
+    {{ mensagem }}
+    <button (click)="errorBanner.clear()">×</button>
+  </div>
+}
+
+<main class="app-content">
+  <router-outlet />
+</main>

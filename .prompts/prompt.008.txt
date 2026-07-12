@@ -1,0 +1,91 @@
+Vamos iniciar a FASE 5 do sistema de gestão de matrículas acadêmicas, seguindo o fluxo do
+CLAUDE.md. Esta fase implementa o frontend Angular consumindo a API REST já pronta das
+Fases 2-4 (Aluno, Curso, Disciplina, Turma, Matrícula), com autenticação via Keycloak e
+identidade visual do Lyceum.
+
+IDENTIDADE VISUAL: aplicar a paleta real do Lyceum como CSS custom properties — navy marinho
+como cor dominante (~#1B2A5B, hover/seleção ~#2E4A8F), accent laranja/dourado do logo
+(~#E8871E) para CTAs e destaques, fundo claro (~#F7F8FA), texto principal escuro (~#1F2430).
+Tabelas/listas de Turma, Aluno e Matrícula devem seguir densidade estilo ERP (compactas,
+escaneáveis), não cards espaçados de app consumer. Não usar nenhum componente JSX de
+terceiros — os tokens acima são a única referência visual a seguir; construa os componentes
+Angular do zero em cima deles.
+
+CONTEXTO DE PRAZO: orçamento apertado para esta fase. Priorize fluxo funcional completo e
+tratamento de erro consistente acima de polimento visual — o PRD pontua "organização, fluxo
+de uso e tratamento de erros" no frontend, não estética. Não gaste tempo em animação,
+responsividade mobile refinada ou dark mode.
+
+ESCOPO DESTA FASE:
+
+1. Setup e autenticação
+   - Angular standalone components (não usar NgModules, a menos que a versão do Angular
+     escolhida recomende o contrário — confirme a versão e registre).
+   - Login via Keycloak: avaliar `angular-oauth2-oidc` (Authorization Code + PKCE) vs.
+     adapter oficial `keycloak-js` — decida e registre considerando tempo de implementação.
+   - Guard de rota que verifica autenticação e papel RBAC (ALUNO, SECRETARIA, ADMIN) antes
+     de liberar acesso a cada tela — reaproveitar os papéis já modelados no Keycloak.
+   - Interceptor HTTP que anexa o Bearer token em toda chamada à API e trata 401 (redireciona
+     para login) e 403 (mensagem de acesso negado) de forma centralizada, consumindo o
+     formato de erro ProblemDetail já padronizado no backend desde a Fase 1.4.
+
+2. Telas de gestão (Curso, Disciplina, Turma) — acesso SECRETARIA/ADMIN
+   - Listagem em tabela densa (estilo ERP) com as ações de criar/editar/excluir.
+   - Formulário de criação/edição com validação client-side espelhando as regras já
+     validadas no backend (não é fonte de verdade, é feedback rápido ao usuário).
+   - Tratamento de erro de validação vindo da API exibido de forma clara por campo, não só
+     um alerta genérico.
+
+3. Tela de Aluno — CRUD para SECRETARIA/ADMIN, leitura do próprio perfil para ALUNO
+   - Reaproveitar o mecanismo ABAC do backend: o frontend não decide quem pode ver o quê
+     (isso é decisão de segurança do backend), mas deve esconder/desabilitar ações que o
+     usuário logado não tem permissão de realizar, para não gerar uma UI que oferece um
+     botão que sempre falha com 403.
+
+4. Fluxo de Matrícula (o coração funcional desta fase)
+   - Tela de turmas disponíveis para o ALUNO logado, com indicação clara de vagas
+     restantes e status aberta/fechada.
+   - Ação de matricular-se (cria matrícula PENDENTE).
+   - Tela de matrículas do aluno logado, com ação de cancelar.
+   - Para SECRETARIA/ADMIN: tela de matrículas por turma, com ação de confirmar
+     matrícula (reaproveitando a decisão de RBAC já tomada na Fase 3 sobre quem confirma).
+   - Tratamento explícito do erro de conflito de vaga (409, da Fase 3): mensagem clara ao
+     usuário de que a vaga foi perdida para outra requisição — este é um momento de UX que
+     vale a pena não deixar como alerta genérico, dado que é o critério eliminatório mais
+     citado do PRD; uma boa mensagem aqui é prova de que você entende o problema de
+     concorrência, não só o backend.
+
+5. Tratamento de erro global
+   - Interceptor/handler central que traduz os tipos de erro do ProblemDetail (400, 401,
+     403, 404, 409, 500) em mensagens de usuário consistentes, sem expor detalhes internos.
+   - Estado de loading e erro de rede (API fora do ar) tratado em todas as telas, não só no
+     caminho feliz.
+
+6. Testes
+   - Testes unitários dos serviços Angular que consomem a API (mock de HttpClient).
+   - Não é necessário e2e de frontend nesta fase além do que já existe em e2e/ contra a API
+     — se sobrar tempo, um e2e de UI (ex: Playwright) é diferencial, mas não é obrigatório
+     dado o prazo; registre como pendência se for cortado.
+
+FORA DO ESCOPO desta fase: paginação/filtros avançados (diferencial, só se sobrar tempo),
+dark mode, responsividade mobile refinada, qualquer tela fora do fluxo de gestão acadêmica
+descrito acima (ex: relatórios).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/008-frontend-angular.md a partir do template, cobrindo os itens acima.
+2. Levante via skill decision-log, ANTES de implementar: (a) angular-oauth2-oidc vs.
+   keycloak-js; (b) abordagem de estado (services + RxJS/signals, sem NgRx — confirme que
+   concorda antes de seguir); (c) estrutura de pastas/módulos do projeto Angular; (d)
+   qualquer outra decisão não-trivial identificada.
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide manualmente o fluxo completo logado como ALUNO (ver turmas, matricular-se,
+   cancelar) e como SECRETARIA (gerenciar Curso/Disciplina/Turma, confirmar matrícula),
+   incluindo o cenário de erro 409 de vaga concorrente.
+5. Rode code-reviewer e security-auditor sobre o diff — atenção especial a: token JWT nunca
+   armazenado em localStorage sem consideração de XSS (avaliar e registrar a estratégia de
+   armazenamento do token), nenhuma lógica de autorização real dependendo só do frontend
+   (isso é decoração de UX, não segurança), nenhuma URL de API hardcoded fora de
+   configuração de ambiente.
+6. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.
