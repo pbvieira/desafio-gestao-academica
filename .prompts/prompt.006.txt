@@ -1,0 +1,41 @@
+Vamos iniciar a FASE 3 do sistema de gestão de matrículas acadêmicas, seguindo o fluxo do
+CLAUDE.md. Esta fase implementa a entidade Matrícula e o fluxo completo de negócio sobre
+ela. É a fase mais crítica do desafio — PRD §06 lista a regra de vagas como critério
+eliminatório, então trate isso com o cuidado correspondente, mesmo com o prazo apertado.
+
+IMPORTANTE — escopo de concorrência nesta fase: implemente um mecanismo SIMPLES E CORRETO
+de proteção de vaga (lock otimista via @Version do JPA na entidade Turma). NÃO faça ainda a
+análise comparativa aprofundada (otimista vs. pessimista vs. constraint de banco, testes de
+carga, tuning) — isso é Fase 7, de propósito, por decisão do Pablo. O que sai desta fase
+precisa estar correto sob concorrência (duas requisições não podem consumir a mesma última
+vaga), só não precisa ser a versão final/comparada.
+
+IMPORTANTE — escopo de mensageria nesta fase: publique os eventos de domínio internamente
+via Spring Modulith (ApplicationEventPublisher + @ApplicationModuleListener no módulo
+secundário), mas NÃO configure ainda o RabbitMQ como broker externo — isso é Fase 4. A
+publicação interna agora é o que permite a Fase 4 apenas configurar a externalização do
+Modulith para o broker, sem reescrever a lógica de publicação. Registre essa decisão de
+sequenciamento em docs/DECISIONS.md antes de implementar.
+
+ESCOPO DESTA FASE:
+
+1. Entidade Matrícula
+   - Campos: referência a Aluno, referência a Turma, status (PENDENTE, CONFIRMADA,
+     CANCELADA), timestamps de criação/confirmação/cancelamento.
+   - Migration Flyway seguindo a convenção por módulo já definida.
+   - Turma já tem campo de limite de vagas e status aberta/fechada desde a Fase 2 — adicione
+     agora o campo de controle de vagas ocupadas (ou calcule via count de matrículas
+     confirmadas — decida e registre qual abordagem, considerando qual é mais segura sob
+     concorrência com @Version) e o campo @Version para lock otimista.
+
+2. Regras de negócio (PRD §02) — implementar TODAS, com teste cobrindo cada uma:
+   - Aluno só pode ser matriculado em turma aberta.
+   - Turma tem limite de vagas; confirmar matrícula consome vaga; cancelar matrícula
+     CONFIRMADA libera vaga.
+   - Aluno não pode se matricular duas vezes na mesma turma — decida e registre: uma
+     matrícula CANCELADA conta como "já matriculado" para efeito dessa regra, ou o aluno
+     pode se matricular novamente na mesma turma após cancelar? Avalie a intenção do PRD
+     antes de decidir.
+   - Transições de status válidas: decida e registre explicitamente a máquina de estados
+     completa — PENDENTE→CONFIRMADA, PENDENTE→CANCELADA e CONFIRMADA→CANCELADA são óbvias;
+     confirme se CONFIRMADA→CONFIRMADA (idempotência de confirmação) ou qualquer outra

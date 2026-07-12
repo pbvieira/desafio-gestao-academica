@@ -26,9 +26,12 @@ public class AlunoService {
 		if (alunoRepository.existsByEmail(email)) {
 			throw new ConflitoRegraNegocioException("Já existe um aluno com o email '" + email + "'.");
 		}
+		String keycloakSubjectId = normalizarKeycloakSubjectId(request.keycloakSubjectId());
+		validarKeycloakSubjectIdDisponivel(keycloakSubjectId, null);
 		Aluno aluno = new Aluno();
 		aluno.setNome(request.nome());
 		aluno.setEmail(email);
+		aluno.setKeycloakSubjectId(keycloakSubjectId);
 		return alunoRepository.save(aluno);
 	}
 
@@ -39,9 +42,43 @@ public class AlunoService {
 		if (alunoRepository.existsByEmailAndIdNot(email, id)) {
 			throw new ConflitoRegraNegocioException("Já existe um aluno com o email '" + email + "'.");
 		}
+		String keycloakSubjectId = normalizarKeycloakSubjectId(request.keycloakSubjectId());
+		validarKeycloakSubjectIdDisponivel(keycloakSubjectId, id);
 		aluno.setNome(request.nome());
 		aluno.setEmail(email);
+		aluno.setKeycloakSubjectId(keycloakSubjectId);
 		return aluno;
+	}
+
+	/**
+	 * Achado de security review (D031 em docs/DECISIONS.md): sem isso, "" ou "  "
+	 * eram aceitos como um valor "real" de keycloakSubjectId (inconsistente com a
+	 * normalização já aplicada a email) - trata string em branco como "sem vínculo"
+	 * (null), igual a não informar o campo.
+	 */
+	private String normalizarKeycloakSubjectId(String keycloakSubjectId) {
+		if (keycloakSubjectId == null || keycloakSubjectId.isBlank()) {
+			return null;
+		}
+		return keycloakSubjectId.trim();
+	}
+
+	/**
+	 * D030 em docs/DECISIONS.md: keycloakSubjectId é opcional (null é sempre
+	 * "disponível" - vários alunos podem estar sem vínculo), mas quando informado
+	 * precisa ser único (reforçado pela constraint UNIQUE do banco também).
+	 */
+	private void validarKeycloakSubjectIdDisponivel(String keycloakSubjectId, Long idAtual) {
+		if (keycloakSubjectId == null) {
+			return;
+		}
+		boolean emUso = idAtual == null ? alunoRepository.existsByKeycloakSubjectId(keycloakSubjectId)
+				: alunoRepository.existsByKeycloakSubjectIdAndIdNot(keycloakSubjectId, idAtual);
+		if (emUso) {
+			throw new ConflitoRegraNegocioException(
+					"O keycloakSubjectId '" + keycloakSubjectId + "' já está vinculado a outro aluno.",
+					"KEYCLOAK_SUBJECT_JA_VINCULADO");
+		}
 	}
 
 	/**

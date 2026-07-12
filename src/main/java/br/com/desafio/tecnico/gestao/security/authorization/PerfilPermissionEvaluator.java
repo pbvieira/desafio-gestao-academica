@@ -8,21 +8,34 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
+import br.com.desafio.tecnico.gestao.academico.AlunoOwnershipResolver;
+
 /**
  * Mecanismo de ABAC deste projeto (D012 em docs/DECISIONS.md): regra de posse "usuário
- * só vê o próprio perfil", com override para SECRETARIA/ADMIN. Este é o exemplo
- * funcional da Fase 1 (specs/003) sobre um recurso que já existe (perfil do usuário
- * autenticado) - a Fase 2 reaproveita o mesmo padrão para Matrícula/Turma, resolvendo o
- * dono real via repositório em vez de comparar direto com o path variable como aqui
- * (ver specs/003-seguranca-rbac-abac.md, seção 4.3).
+ * só vê o próprio recurso", com override para SECRETARIA/ADMIN. PERFIL é o exemplo
+ * funcional da Fase 1 (specs/003, compara direto com o path variable, que já É o
+ * subject). ALUNO/MATRICULA (D030, specs/006) resolvem o dono real via
+ * AlunoOwnershipResolver - API pública do módulo `academico` (pacote raiz), não seus
+ * repositórios internos, para não violar o encapsulamento de módulo do Spring
+ * Modulith (ver ModularidadeTest).
  */
 @Component
 public class PerfilPermissionEvaluator implements PermissionEvaluator {
 
 	private static final String TARGET_TYPE_PERFIL = "PERFIL";
+	private static final String TARGET_TYPE_ALUNO = "ALUNO";
+	private static final String TARGET_TYPE_MATRICULA = "MATRICULA";
 	private static final String PERMISSION_READ = "READ";
+	private static final String PERMISSION_MATRICULAR = "MATRICULAR";
+	private static final String PERMISSION_GERENCIAR = "GERENCIAR";
 	private static final String ROLE_SECRETARIA = "ROLE_SECRETARIA";
 	private static final String ROLE_ADMIN = "ROLE_ADMIN";
+
+	private final AlunoOwnershipResolver ownershipResolver;
+
+	public PerfilPermissionEvaluator(AlunoOwnershipResolver ownershipResolver) {
+		this.ownershipResolver = ownershipResolver;
+	}
 
 	@Override
 	public boolean hasPermission(Authentication authentication, Object targetDomainObject, Object permission) {
@@ -33,9 +46,18 @@ public class PerfilPermissionEvaluator implements PermissionEvaluator {
 	@Override
 	public boolean hasPermission(Authentication authentication, Serializable targetId, String targetType,
 			Object permission) {
-		if (!TARGET_TYPE_PERFIL.equals(targetType)) {
+		if (targetId == null || targetType == null) {
 			return false;
 		}
+		return switch (targetType) {
+			case TARGET_TYPE_PERFIL -> permitirPerfil(authentication, targetId, permission);
+			case TARGET_TYPE_ALUNO -> permitirAluno(authentication, targetId, permission);
+			case TARGET_TYPE_MATRICULA -> permitirMatricula(authentication, targetId, permission);
+			default -> false;
+		};
+	}
+
+	private boolean permitirPerfil(Authentication authentication, Serializable targetId, Object permission) {
 		// Só "READ" é uma permissão definida para PERFIL nesta fase - qualquer outra
 		// (ex: "WRITE") nega por padrão em vez de se comportar como READ silenciosamente
 		// (achado de code review: o parâmetro "permission" era recebido mas ignorado).
@@ -47,6 +69,52 @@ public class PerfilPermissionEvaluator implements PermissionEvaluator {
 		}
 		String subject = subjectOf(authentication);
 		return subject != null && subject.equals(String.valueOf(targetId));
+	}
+
+	private boolean permitirAluno(Authentication authentication, Serializable targetId, Object permission) {
+		if (!PERMISSION_MATRICULAR.equals(permission)) {
+			return false;
+		}
+		if (isStaff(authentication)) {
+			return true;
+		}
+		Long alunoId = comoLong(targetId);
+		if (alunoId == null) {
+			return false;
+		}
+		String subject = subjectOf(authentication);
+		return subject != null
+				&& ownershipResolver.keycloakSubjectIdDoAluno(alunoId).map(subject::equals).orElse(false);
+	}
+
+	private boolean permitirMatricula(Authentication authentication, Serializable targetId, Object permission) {
+		if (!PERMISSION_GERENCIAR.equals(permission)) {
+			return false;
+		}
+		if (isStaff(authentication)) {
+			return true;
+		}
+		Long matriculaId = comoLong(targetId);
+		if (matriculaId == null) {
+			return false;
+		}
+		String subject = subjectOf(authentication);
+		return subject != null && ownershipResolver.keycloakSubjectIdDoAlunoDaMatricula(matriculaId)
+				.map(subject::equals).orElse(false);
+	}
+
+	private Long comoLong(Serializable targetId) {
+		if (targetId instanceof Long l) {
+			return l;
+		}
+		if (targetId instanceof Number n) {
+			return n.longValue();
+		}
+		try {
+			return Long.parseLong(String.valueOf(targetId));
+		} catch (NumberFormatException ex) {
+			return null;
+		}
 	}
 
 	private boolean isStaff(Authentication authentication) {

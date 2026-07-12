@@ -3,8 +3,11 @@ package br.com.desafio.tecnico.gestao.errorhandling;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,6 +47,43 @@ class GlobalExceptionHandlerTest {
 
 		assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
 		assertThat(problem.getProperties()).containsEntry("errorCode", "BUSINESS_CONFLICT");
+	}
+
+	@Test
+	void conflitoRegraNegocioComErrorCodeExplicitoPreservaOCodigo() {
+		HttpServletRequest request = mockRequest("/api/matriculas/1/confirmar");
+
+		ProblemDetail problem = handler
+				.handleConflito(new ConflitoRegraNegocioException("Vagas esgotadas.", "VAGAS_ESGOTADAS"), request);
+
+		assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+		assertThat(problem.getProperties()).containsEntry("errorCode", "VAGAS_ESGOTADAS");
+	}
+
+	@Test
+	void conflitoDeConcorrenciaVira409SemVazarDetalheInterno() {
+		HttpServletRequest request = mockRequest("/api/matriculas/1/confirmar");
+		OptimisticLockingFailureException excecaoOriginal = new ObjectOptimisticLockingFailureException("Turma", 1L);
+
+		ProblemDetail problem = handler.handleConflitoConcorrencia(excecaoOriginal, request);
+
+		assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+		assertThat(problem.getDetail()).isEqualTo("Conflito de concorrência, tente novamente.");
+		assertThat(problem.getDetail()).doesNotContain("Turma").doesNotContain("ObjectOptimisticLockingFailureException");
+		assertThat(problem.getProperties()).containsEntry("errorCode", "CONCURRENCY_CONFLICT");
+	}
+
+	@Test
+	void conflitoDeIntegridadeVira409SemVazarDetalheDoBanco() {
+		HttpServletRequest request = mockRequest("/api/matriculas");
+		DataIntegrityViolationException excecaoOriginal = new DataIntegrityViolationException(
+				"duplicate key value violates unique constraint \"uk_matricula_aluno_turma_ativa\"");
+
+		ProblemDetail problem = handler.handleConflitoIntegridade(excecaoOriginal, request);
+
+		assertThat(problem.getStatus()).isEqualTo(HttpStatus.CONFLICT.value());
+		assertThat(problem.getDetail()).doesNotContain("uk_matricula_aluno_turma_ativa").doesNotContain("constraint");
+		assertThat(problem.getProperties()).containsEntry("errorCode", "DATA_INTEGRITY_CONFLICT");
 	}
 
 	private HttpServletRequest mockRequest(String path) {

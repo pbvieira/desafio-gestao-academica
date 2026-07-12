@@ -47,6 +47,9 @@ jobs:
       - name: Smoke test e2e (specs/004, secao 4.7)
         run: bash e2e/smoke-test.sh
 
+      - name: E2E fluxo de Matrícula (specs/006, secao 7 - D030)
+        run: bash e2e/matricula-flow.sh
+
       - name: Diagnostico em caso de falha
         if: failure()
         run: |

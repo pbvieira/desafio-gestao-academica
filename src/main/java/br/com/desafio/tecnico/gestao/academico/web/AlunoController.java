@@ -18,13 +18,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.com.desafio.tecnico.gestao.academico.dto.AlunoRequest;
 import br.com.desafio.tecnico.gestao.academico.dto.AlunoResponse;
+import br.com.desafio.tecnico.gestao.academico.dto.MatriculaResponse;
 import br.com.desafio.tecnico.gestao.academico.service.AlunoService;
+import br.com.desafio.tecnico.gestao.academico.service.MatriculaService;
 
 /**
- * Todas as operações (incluindo leitura) restritas a SECRETARIA/ADMIN nesta fase -
- * consultar/listar dados de outros alunos não é algo que um ALUNO deveria poder fazer
- * livremente; self-view fica para quando o vínculo Keycloak<->Aluno for exercitado de
- * verdade (specs/005, seção 4.4).
+ * CRUD de Aluno (criar/editar/listar/buscar/excluir) restrito a SECRETARIA/ADMIN
+ * (@PreAuthorize de classe, specs/005 seção 4.4) - consultar/listar dados de outros
+ * alunos não é algo que um ALUNO deveria poder fazer livremente. listarMatriculas é a
+ * exceção: sobrescreve a restrição de classe com ABAC (specs/006, D030) - primeiro uso
+ * real do vínculo Keycloak<->Aluno (D006/D030).
  */
 @RestController
 @RequestMapping("/api/alunos")
@@ -33,9 +36,11 @@ import br.com.desafio.tecnico.gestao.academico.service.AlunoService;
 public class AlunoController {
 
 	private final AlunoService alunoService;
+	private final MatriculaService matriculaService;
 
-	public AlunoController(AlunoService alunoService) {
+	public AlunoController(AlunoService alunoService, MatriculaService matriculaService) {
 		this.alunoService = alunoService;
+		this.matriculaService = matriculaService;
 	}
 
 	@PostMapping
@@ -63,6 +68,17 @@ public class AlunoController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void excluir(@PathVariable Long id) {
 		alunoService.excluir(id);
+	}
+
+	/**
+	 * specs/006-matricula.md, seção 4.5: sobrescreve o @PreAuthorize de classe
+	 * (staff-only) - aluno pode consultar as próprias matrículas (ABAC, D030),
+	 * SECRETARIA/ADMIN consultam qualquer uma.
+	 */
+	@GetMapping("/{alunoId}/matriculas")
+	@PreAuthorize("hasPermission(#alunoId, 'ALUNO', 'MATRICULAR')")
+	public List<MatriculaResponse> listarMatriculas(@PathVariable Long alunoId) {
+		return matriculaService.listarPorAluno(alunoId).stream().map(MatriculaResponse::de).toList();
 	}
 
 }

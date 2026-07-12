@@ -1,8 +1,13 @@
 A Fase 1 (`specs/001` a `specs/004`) cobriu só infraestrutura — banco, cache/sessão,
 mensageria e identidade — sem nenhuma tabela de domínio (ver `specs/001-infraestrutura-base.md`,
 seção 4). As primeiras migrations reais (`V1`–`V5`) entraram na spec 005 (domínio base:
-Aluno, Curso, Disciplina, `curso_disciplina`, Turma) — Matrícula ainda não existe, fica
-para a spec da Fase 3.
+Aluno, Curso, Disciplina, `curso_disciplina`, Turma). `V6`/`V7` entraram na spec 006
+(Matrícula): tabela `matricula` e as colunas `vagas_ocupadas`/`version` em `turma`,
+usadas pelo mecanismo de proteção de vaga sob concorrência (D024/D025). `V8` também é da
+spec 006, mas não é dado de nenhum módulo de domínio — cria `event_publication`, a
+tabela interna do Spring Modulith (`spring-modulith-events-jpa`) para o registro de
+publicação de eventos de domínio (`@ApplicationModuleListener`, D029), rotulada
+`infraestrutura` na convenção abaixo por ser cross-cutting.
 
 ## Convenção de nomenclatura (D015 em docs/DECISIONS.md)
 

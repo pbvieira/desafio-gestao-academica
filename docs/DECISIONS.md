@@ -898,3 +898,341 @@ não é uma omissão, é uma escolha explícita de escopo sob prazo.
 
 **Riscos conhecidos / o que revisitar se o contexto mudar:** Revisitar o item 5 se `academico` passar a
 usar cache de segundo nível do Hibernate ou entidades atravessarem múltiplas sessões/serialização.
+
+---
+
+<a id="d024"></a>
+## D024 — Mecanismo de proteção de vaga: UPDATE condicional atômico + `@Version`
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário (pesquisa solicitada explicitamente antes de decidir —
+"quero uma solução robusta de mercado, estilo grande e-commerce")
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** O escopo desta fase já fixava "lock otimista via `@Version` do JPA" como mecanismo de
+concorrência (decisão de sequenciamento anterior do Pablo — a comparação aprofundada com lock pessimista/
+outras estratégias fica para a Fase 7). Faltava decidir *como*, exatamente, o consumo de vaga usa esse
+mecanismo: o padrão "tutorial" de JPA (carregar entidade → checar em Java → `save()`, deixando só o
+`@Version` pegar conflito no commit) vs. um `UPDATE` condicional atômico que checa e decrementa no mesmo
+statement SQL.
+
+**Pesquisa realizada (ver mensagem correspondente na conversa para as fontes completas):** para sistemas de
+inventário com contenção moderada (não é o caso de flash sale com dezenas de milhares de req/s pela mesma
+unidade — turmas têm capacidade modesta), o padrão consolidado como mais robusto é o `UPDATE` condicional
+(`WHERE quantidade < limite`), porque elimina a janela entre leitura e escrita por construção — o próprio
+lock de linha do banco durante o `UPDATE` serializa tentativas concorrentes. Lock otimista por versão puro
+é descrito como ideal para "alta concorrência, baixo conflito" (linhas *diferentes*), não para a disputa
+pela última vaga da *mesma* linha, onde tende a gerar mais round-trips desperdiçados.
+
+**Alternativas consideradas:**
+- **`UPDATE` condicional atômico + `@Version`** — `UPDATE turma SET vagas_ocupadas = vagas_ocupadas + 1,
+  version = version + 1 WHERE id = ? AND version = ? AND vagas_ocupadas < limite_vagas` (via
+  `@Modifying @Query` do Spring Data). Zero linhas afetadas → uma re-consulta (só no caminho de falha)
+  diferencia "vagas esgotadas" de "conflito de versão por edição concorrente de outro campo da Turma".
+- **Carregar entidade → checar em Java → `save()`** — mais próximo do fluxo JPA convencional, mas o
+  `UPDATE` gerado pelo Hibernate só checa a versão, não a condição de negócio diretamente; menos preciso
+  para diferenciar os dois motivos de falha.
+
+**Decisão:** `UPDATE` condicional atômico, com `@Version` mantido na entidade `Turma` para proteger
+concorrência em outros campos (ex: edição administrativa simultânea).
+
+**Justificativa:** Elimina a janela de corrida por construção (não depende de nenhuma lógica em Java entre
+ler e escrever); permite diferenciar precisamente "vagas esgotadas" (regra de negócio, 409
+`ConflitoRegraNegocioException`, `VAGAS_ESGOTADAS`) de "conflito de concorrência genérico" (edição
+simultânea de outro campo, também 409, código diferente); é o padrão que a pesquisa de mercado aponta como
+mais robusto nessa escala de contenção, sem introduzir a complexidade de Redis/fila/reserva com TTL
+(apropriada só em escala de flash sale, fora do escopo desta fase e desproporcional à carga real de
+matrícula em turma).
+
+**Trade-offs aceitos:** Query nativa/JPQL de `UPDATE` em vez de `save()` convencional — menos "idiomático"
+ao estilo do resto do projeto (que usa `save()`/dirty checking em todo o resto do CRUD), mas justificado
+pela criticidade desta regra específica (PRD §06, critério eliminatório).
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se a carga real de matrícula concorrente
+crescer para uma escala de "flash sale" (milhares de req/s pela mesma turma), revisitar na Fase 7 com
+reserva via Redis + fila, conforme a pesquisa indicou como padrão nessa escala.
+
+---
+
+<a id="d025"></a>
+## D025 — Contador de vagas ocupadas: campo incremental, não `COUNT` calculado
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário (mesma consulta de D024)
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** Decorrência direta de D024 — o `UPDATE` condicional atômico precisa de um campo na própria
+linha de `Turma` para checar/decrementar; decidir se esse campo existe (`vagas_ocupadas`) ou se é sempre
+recalculado via `COUNT(*)` de `Matricula` com `status = 'CONFIRMADA'`.
+
+**Alternativas consideradas:**
+- **Campo `vagas_ocupadas` (int) na Turma** — atualizado pelo próprio `UPDATE` condicional de D024, na
+  mesma linha protegida por `@Version`; `CHECK (vagas_ocupadas <= limite_vagas)` e
+  `CHECK (vagas_ocupadas >= 0)` como backstop de banco (mesmo padrão de `CHECK (limite_vagas > 0)` da
+  Fase 2).
+- **`COUNT(*)` de matrículas `CONFIRMADA`** — nunca dessincroniza da realidade, mas quebra a atomicidade do
+  `UPDATE` condicional (a condição dependeria de outra tabela); exigiria lock pessimista ou subquery no
+  `WHERE`, mais caro e menos direto.
+
+**Decisão:** Campo incremental `vagas_ocupadas` na Turma.
+
+**Justificativa:** Consequência direta de D024 — a atomicidade do `UPDATE` condicional depende de checar e
+escrever a mesma linha num único statement.
+
+**Trade-offs aceitos:** Duplicação de informação (o número de matrículas `CONFIRMADA` também é derivável da
+tabela `matricula`) — mitigado pelo `CHECK` constraint como backstop de integridade.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado em
+D024.
+
+---
+
+<a id="d026"></a>
+## D026 — Matrícula cancelada permite nova matrícula na mesma turma
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** Regra de unicidade "aluno não pode se matricular duas vezes na mesma turma" (PRD §02) precisa
+decidir se uma matrícula `CANCELADA` conta como "já matriculado" para esse efeito.
+
+**Alternativas consideradas:**
+- **Permite recriar** — unicidade checada só contra matrículas `PENDENTE`/`CONFIRMADA`; cobre "cancelei por
+  engano" ou "desisti e mudei de ideia". Implementação: índice único parcial,
+  `UNIQUE (aluno_id, turma_id) WHERE status <> 'CANCELADA'`.
+- **Cancelamento definitivo** — unicidade vale contra qualquer matrícula existente, incluindo `CANCELADA`;
+  `UNIQUE (aluno_id, turma_id)` simples.
+
+**Decisão:** Permite recriar após cancelamento.
+
+**Justificativa:** Mais alinhado à intenção prática do PRD — um cancelamento é uma decisão do momento, não
+necessariamente permanente; bloquear matrícula futura na mesma turma por causa de um cancelamento antigo
+seria uma restrição não pedida explicitamente e prejudicial à experiência do aluno.
+
+**Trade-offs aceitos:** Índice único parcial em vez de `UNIQUE` simples — sintaxe específica do Postgres
+(`CREATE UNIQUE INDEX ... WHERE ...`), levemente menos portável, mas o projeto já é Postgres-only (D001).
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado.
+
+---
+
+<a id="d027"></a>
+## D027 — Confirmação de matrícula restrita a SECRETARIA/ADMIN
+
+**Data:** 2026-07-14
+**Origem:** 🤝 Sugestão da IA revisada pelo usuário
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** RBAC de `POST /api/matriculas/{id}/confirmar` — decidir se é um passo administrativo (staff)
+ou se o próprio aluno pode confirmar a própria matrícula.
+
+**Alternativas consideradas:**
+- **Só SECRETARIA/ADMIN** — `PENDENTE→CONFIRMADA` como gate administrativo (ex: validação de documentos/
+  pagamento fora do escopo desta fase, mas modelado como possível).
+- **ALUNO também pode confirmar a própria matrícula** — self-service completo.
+
+**Decisão:** Só SECRETARIA/ADMIN.
+
+**Justificativa:** A existência de um status `PENDENTE` distinto de `CONFIRMADA` sugere que criar e
+confirmar são passos distintos, possivelmente por atores diferentes — se a confirmação fosse automática/
+self-service, um único status já bastaria. ALUNO cria (`POST /api/matriculas`) e cancela a própria
+(`POST /api/matriculas/{id}/cancelar`); SECRETARIA/ADMIN confirmam.
+
+**Trade-offs aceitos:** Fluxo de matrícula não é 100% self-service para o aluno — depende de uma ação de
+staff para consumir a vaga. Aceito porque reflete melhor o desenho de um sistema acadêmico real.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o PRD (ou uma clarificação futura) indicar
+confirmação automática/self-service, revisitar.
+
+---
+
+<a id="d028"></a>
+## D028 — Máquina de estados de Matrícula e resposta a conflito de vaga
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado (grupado por baixo risco, mesmo padrão de D022)
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** Duas decisões relacionadas, agrupadas: (1) a máquina de estados completa de `Matricula`,
+incluindo os casos de borda que o desenho óbvio (PENDENTE→CONFIRMADA, PENDENTE→CANCELADA,
+CONFIRMADA→CANCELADA) não cobre; (2) o que a API faz quando uma requisição perde a disputa pela última
+vaga.
+
+**Decisão — máquina de estados:**
+- `PENDENTE → CONFIRMADA`: consome vaga (D024/D025).
+- `PENDENTE → CANCELADA`: não mexe em vaga (nunca ocupou).
+- `CONFIRMADA → CANCELADA`: libera vaga.
+- `CONFIRMADA → CONFIRMADA`: idempotente, não é erro — confirmar de novo uma matrícula já confirmada
+  retorna 200 sem efeito colateral (evita expor um detalhe de implementação como erro de negócio se o
+  cliente reenviar por timeout/retry de rede).
+- `CANCELADA` é terminal: qualquer transição a partir dela (confirmar ou cancelar de novo) é 409
+  (`ConflitoRegraNegocioException`, `TRANSICAO_INVALIDA`).
+- `CONFIRMADA → PENDENTE`: não existe, não modelado.
+
+**Decisão — conflito de vaga:** 409 direto ao cliente, sem retry automático no backend. Consequência de
+D024: com o `UPDATE` condicional atômico, "perder a última vaga" não é mais um lock conflict genérico — é
+um resultado de negócio (zero linhas afetadas porque `vagas_ocupadas` já bateu o limite). Retry automático
+não ajudaria nesse caso (o resultado não muda) e poderia até ser injusto (se um cancelamento de outro aluno
+abrir vaga entre tentativas do retry, isso furaria fila de forma não determinística em vez de reflitir a
+ordem real das requisições). Retry só faria sentido no caso raro de conflito de versão por edição
+concorrente de outro campo da Turma — valor baixo, não justifica a complexidade.
+
+**Justificativa:** Ambas as escolhas seguem diretamente do desenho já decidido em D024 (não são decisões
+independentes de alto risco) — apresentadas junto com a spec para revisão, não bloqueantes.
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado em
+D024.
+
+---
+
+<a id="d029"></a>
+## D029 — Sequenciamento de mensageria: eventos internos via Spring Modulith nesta fase, RabbitMQ na Fase 4
+
+**Data:** 2026-07-14
+**Origem:** 🧑 Decisão do Pablo (dada explicitamente na instrução desta fase, registrada aqui antes de
+implementar conforme solicitado)
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** O PRD exige mensageria assíncrona real (RabbitMQ) com um consumidor em módulo/serviço
+separado (ver CLAUDE.md, "Arquitetura-alvo"). Era preciso decidir a ordem: implementar a publicação de
+eventos de domínio (`MatriculaCriada`/`Confirmada`/`Cancelada`) e o broker externo juntos nesta fase, ou
+sequenciar em duas etapas.
+
+**Decisão:** Publicar os eventos nesta fase só internamente, via `ApplicationEventPublisher` do
+Spring/Modulith, consumidos por um `@ApplicationModuleListener` no módulo secundário `notificacao`. A
+externalização para o RabbitMQ como broker real fica para a Fase 4.
+
+**Justificativa (do Pablo):** A publicação interna agora é o que permite a Fase 4 apenas configurar a
+externalização do Spring Modulith para o broker (`spring-modulith-events-amqp` ou equivalente), sem
+reescrever a lógica de publicação/consumo em si — reduz retrabalho e separa "a regra de negócio publica o
+evento certo, no momento certo" (testável agora, sem infraestrutura externa) de "o evento atravessa
+processos via broker" (Fase 4, com sua própria configuração de exchange/fila/idempotência de consumo).
+
+**Trade-offs aceitos:** O `@ApplicationModuleListener` desta fase é síncrono-dentro-do-processo (mesma
+JVM); não testa nada sobre falha de broker, mensagem duplicada, ou consumidor fora do ar — esses cenários
+só existem a partir da Fase 4.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum — sequenciamento já é a decisão
+deliberada.
+
+---
+
+<a id="d030"></a>
+## D030 — Decisões menores agrupadas: extensão do ABAC, vínculo Aluno↔Keycloak, RBAC de listagem por turma, ferramenta de E2E
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante a fase de planejamento (grupado por
+baixo risco, mesmo padrão de D022)
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** Conjunto de decisões técnicas menores identificadas ao planejar esta fase, agrupadas para não
+inflar o log:
+
+- **Extensão do `PermissionEvaluator` único** (não um novo por tipo) — a spec 003 já previa essa escolha
+  para quando Matrícula existisse, e `MethodSecurityConfig` só injeta um bean `PermissionEvaluator`. Dois
+  `targetType` novos no mesmo componente: `"ALUNO"` + permissão `"MATRICULAR"` (resolve o Aluno pelo id,
+  compara `keycloakSubjectId` ao subject do JWT — usado em `POST /api/matriculas` via `#request.alunoId()`
+  e em `GET /api/alunos/{alunoId}/matriculas`); `"MATRICULA"` + permissão `"GERENCIAR"` (resolve a
+  Matrícula pelo id, compara `matricula.aluno.keycloakSubjectId` ao subject — usado em consultar/cancelar
+  uma matrícula específica).
+- **Vínculo Aluno↔Keycloak passa a ser preenchível** — gap encontrado: a coluna `keycloak_subject_id`
+  existe desde a Fase 2 (D006/D022) mas nenhum endpoint a expunha. `AlunoRequest`/`AlunoService` passam a
+  aceitar um `keycloakSubjectId` opcional, só editável por SECRETARIA/ADMIN (que já são os únicos que
+  mexem em Aluno) — vincula o registro acadêmico à conta de login. Self-service de vínculo (o próprio
+  aluno reivindicar seu registro) continua fora de escopo.
+- **`GET /api/turmas/{turmaId}/matriculas` (lista completa de uma turma) é staff-only** (RBAC simples,
+  `hasRole('SECRETARIA') or hasRole('ADMIN')`, sem ABAC) — um aluno não deveria ver quem mais está
+  matriculado na turma (vazaria dados de outros alunos).
+- **E2E via `e2e/matricula-flow.sh`**, reaproveitando o padrão bash/curl já estabelecido em
+  `e2e/smoke-test.sh` (specs/004) em vez de introduzir uma ferramenta nova (REST Assured/Testcontainers)
+  só para isso. O CI (`.github/workflows/ci.yml`) já sobe o compose completo com Keycloak real e os
+  usuários de teste (`aluno.teste`/`secretaria.teste`) antes de rodar o smoke test — o novo script busca
+  tokens reais desse Keycloak e exercita a API via HTTP real (não JWT simulado do MockMvc), o que valida a
+  cadeia OAuth2 Resource Server inteira, não só o `PermissionEvaluator`. Adicionado como novo step no
+  `ci.yml`, logo após o smoke test existente.
+
+**Decisão:** Conforme detalhado acima.
+
+**Justificativa:** Escolhas de baixo risco que reaproveitam padrões já estabelecidos no projeto (mecanismo
+de ABAC da spec 003; convenção de E2E via bash/curl da spec 004) em vez de introduzir componentes novos sem
+necessidade, sob prazo apertado.
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o número de `targetType` no
+`PermissionEvaluator` único crescer muito nas próximas fases, revisitar a divisão em um `PermissionEvaluator`
+por tipo (já sinalizado como opção pela spec 003).
+
+---
+
+<a id="d031"></a>
+## D031 — Correções decorrentes do code-reviewer/security-auditor da spec 006
+
+**Data:** 2026-07-14
+**Origem:** 🤖 Default da IA — achados de review, corrigidos sem levantar como pergunta separada (correção
+de bug/robustez, não decisão com alternativas razoáveis em aberto)
+**Spec relacionada:** specs/006-matricula.md
+**Contexto:** `code-reviewer` e `security-auditor` revisaram o diff completo desta spec em paralelo, com
+atenção explícita ao mecanismo de proteção de vaga (D024) e ao primeiro uso real de ABAC do projeto. Nenhum
+achado Crítico/Alto; um achado Médio-Alto e um achado Médio (mesma classe de problema encontrada por ambos
+os revisores, de ângulos diferentes) mereciam correção. Resumo e resolução:
+
+1. **[Médio-Alto, code-reviewer + Médio, security-auditor] TOCTOU nas checagens de unicidade em código
+   (`existsBy...`) degradava para 500 em vez de 409 sob concorrência real.** Duas ocorrências do mesmo
+   padrão: `MatriculaService.criar` (duplicidade aluno/turma, backstop no índice único parcial de V6) e
+   `AlunoService.criar/editar` (`keycloakSubjectId`, backstop na constraint UNIQUE de V1). Sob duas
+   requisições concorrentes (ex: duplo clique), ambas podem passar a checagem `existsBy...` e uma delas
+   viola a constraint no `INSERT`/`UPDATE`; `GlobalExceptionHandler` não tinha handler para
+   `DataIntegrityViolationException`, então caía no handler genérico (500). Este é o mesmo padrão já
+   apontado como risco conhecido em `CursoService` na Fase 2 (comentário em código, nunca endereçado
+   globalmente). **Corrigido com um handler genérico** (`GlobalExceptionHandler.handleConflitoIntegridade`,
+   409, `errorCode=DATA_INTEGRITY_CONFLICT`, mensagem sem detalhe de constraint/tabela/coluna) — uma rede
+   de segurança única para qualquer violação de unicidade sob corrida em qualquer service do projeto, em
+   vez de corrigir cada `existsBy...` individualmente com lock pessimista ou upsert condicional (fora de
+   escopo/desproporcional dado o prazo — a checagem em código continua sendo o caminho feliz 99,9% do
+   tempo; isto é só a rede de segurança para a janela de corrida rara). Teste novo:
+   `GlobalExceptionHandlerTest#conflitoDeIntegridadeVira409SemVazarDetalheDoBanco`.
+2. **[Médio, code-reviewer, verificado empiricamente com SQL logging] `MatriculaService.confirmar`/
+   `cancelar` reintroduziam N+1 ao montar a resposta, mascarado só por `open-in-view=true`.** O
+   `clearAutomatically=true` do `consumirVaga`/`liberarVaga` (necessário para a re-consulta correta de
+   VAGAS_ESGOTADAS vs. CONFLITO_CONCORRENCIA, D024) detacha `matricula` do persistence context; a correção
+   inicial (re-buscar via `findById` com `@EntityGraph` após `save()`) **não funcionava de verdade** — o
+   `save()` faz `merge()`, que sem `cascade=MERGE` na associação cria proxies não inicializados para
+   aluno/turma, e uma nova consulta via `findById` não ajudava porque o identity map do Hibernate já
+   devolvia a mesma instância recém-mergeada em cache, sem re-executar a query com o `@EntityGraph`.
+   Confirmado com log de SQL (`org.hibernate.SQL=DEBUG`) rodando `MatriculaIntegrationTest`: a correção
+   inicial ainda gerava 2 selects extras (lazy load de aluno/turma) após o `update matricula`. **Corrigido
+   de verdade** trocando `save()` por: recarregar uma instância MANAGED via `buscarPorId` (que usa
+   `@EntityGraph`) **antes** de mutar os campos, deixando o dirty checking do Hibernate gerar o `UPDATE` no
+   commit — sem `merge()`, aluno/turma nunca são substituídos por proxies. Reverificado com o mesmo log de
+   SQL: nenhuma query extra após o `UPDATE turma`/`UPDATE matricula`. Isso também elimina a dependência de
+   `spring.jpa.open-in-view=true` para este fluxo especificamente (o código agora está correto mesmo se
+   open-in-view for desabilitado no futuro).
+3. **[Baixo, security-auditor] `keycloakSubjectId` aceitava string em branco (`""`/`"  "`), inconsistente
+   com a normalização já aplicada a email.** Não explorável para IDOR (um `sub` real do Keycloak nunca é
+   vazio, então o pior caso é negar acesso ao dono legítimo, nunca conceder a um impostor), mas era uma
+   inconsistência com o padrão já estabelecido. **Corrigido:** `AlunoService.normalizarKeycloakSubjectId`
+   trata `null`/string em branco como "sem vínculo" (mesmo padrão de `normalizarEmail`).
+4. **[Baixo, code-reviewer] Comentário impreciso em `MatriculaRepository.findAlunoKeycloakSubjectIdByMatriculaId`**
+   sobre o motivo da projeção escalar (dizia evitar `LazyInitializationException` por o resolver não ser
+   `@Transactional`, mas métodos de repositório já são transacionais por padrão independente disso).
+   **Corrigido:** comentário ajustado para o motivo real (evitar carregar a entidade inteira/N+1).
+
+**Achados descartados com justificativa (não corrigidos):**
+- **[Baixo, security-auditor] Camada de service sem checagem de autorização independente do
+  `@PreAuthorize` do controller.** Hoje não é explorável (só os controllers chamam `MatriculaService`), e
+  duplicar a checagem de posse na camada de service seria complexidade adicional para um risco puramente
+  hipotético (futuro chamador interno que ignore o controller). Aceito como risco conhecido — ver seção
+  "Pendências para Fase 7" da spec 006.
+- **[Informativo, security-auditor] Nome da permissão `GERENCIAR` reutilizado para leitura e escrita de
+  Matrícula** (em vez de uma permissão `READ` separada, como em `PERFIL`). Puramente cosmético, sem risco
+  de segurança (a checagem de posse é a mesma para ambos os casos); não vale o retrabalho sob prazo.
+- **[Baixo, code-reviewer] Drift entre specs/006-matricula.md e a localização real dos endpoints de
+  listagem** (`GET /api/alunos/{alunoId}/matriculas`/`GET /api/turmas/{turmaId}/matriculas` foram
+  implementados em `AlunoController`/`TurmaController`, não em `MatriculaController` como a seção 4.2/4.5
+  da spec original descrevia) — endereçado atualizando a spec para refletir a implementação real (melhor
+  aninhamento REST), não revertendo o código.
+
+**Trade-offs aceitos:** O handler genérico de `DataIntegrityViolationException` (item 1) tem uma mensagem
+menos específica que os `errorCode`s de negócio dedicados (`MATRICULA_DUPLICADA`, etc.) — aceitável porque
+só dispara na janela de corrida rara; o caminho feliz continua retornando o `errorCode` específico via a
+checagem em código.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado além do já mencionado nos
+itens descartados acima.
