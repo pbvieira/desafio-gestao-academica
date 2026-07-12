@@ -181,7 +181,7 @@ label {
 }
 
 .badge-pendente {
-  color: var(--gold);
+  color: var(--warn);
 }
 
 /* Tabela densa estilo ERP - cabeçalho deixa de ser navy preenchido (pesado em muitas
