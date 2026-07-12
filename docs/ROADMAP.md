@@ -45,9 +45,11 @@ ponto do desenvolvimento.
 | 3 | Matrícula — fluxo funcional completo (criar/confirmar/cancelar, status, duplicidade, consulta por aluno/turma) com proteção básica de vaga | **Concluída** — spec 006 |
 | 4 | Mensageria de domínio: publicar `MatriculaCriada`/`Confirmada`/`Cancelada` no RabbitMQ (infraestrutura já de pé desde a Fase 1) + consumidor no módulo secundário + DLQ/retry | **Concluída** — spec 007 |
 | 5 | Frontend Angular mínimo: telas dos fluxos principais, consumo da API, tratamento de erro | **Concluída** — spec 008 |
-| 6 | Testes: completar unit/integration faltantes, e2e dos fluxos principais de negócio, manter cobertura ≥ 80% (gate JaCoCo já ativo desde a Fase 1) | Pendente |
-| 7 | Concorrência aprofundada — estratégia final (otimista/pessimista/constraint), teste de disputa pela última vaga, decisão documentada, resposta de entrevista pronta | Pendente |
-| 8 | Documentação final: completar o `README.md` (já existe uma versão inicial, criada na Fase 1) com uso de IA, decisões técnicas, como a vaga é protegida, como a concorrência é tratada | **Concluída** — README com seções de frontend, observabilidade e Keycloak/RBAC |
+| 5b *(fora do plano original)* | Redesign visual do frontend (nova identidade "Institucional acadêmico" + sidebar) — diferencial pedido pelo Pablo após ver o resultado da Fase 5, não estava no plano original | **Concluída** — spec 009 |
+| 5c *(fora do plano original)* | Administração de usuários/papéis (tela ADMIN-only para reatribuir papel via Keycloak Admin API) — diferencial pedido junto com a 5b | **Aprovada, não implementada** — spec 010 |
+| 6 | Testes: completar unit/integration faltantes, e2e dos fluxos principais de negócio, manter cobertura ≥ 80% (gate JaCoCo já ativo desde a Fase 1) | Pendente — spec ainda não criada (será `specs/011-*`, não `specs/009-*` — ver nota abaixo) |
+| 7 | Concorrência aprofundada — estratégia final (otimista/pessimista/constraint), teste de disputa pela última vaga, decisão documentada, resposta de entrevista pronta | Pendente — mecanismo já implementado (D024); falta só o documento/resposta de entrevista |
+| 8 | Documentação final: completar o `README.md` (já existe uma versão inicial, criada na Fase 1) com uso de IA, decisões técnicas, como a vaga é protegida, como a concorrência é tratada | **Concluída para o estado atual** — ver nota abaixo sobre por que isso vai ficar defasado de novo quando a spec 010 for implementada |
 
 **Nota para a entrevista:** a inversão de prioridade (diferenciais antes do obrigatório) é
 o tipo de decisão a explicar com transparência, não a esconder — o trade-off e o motivo de
@@ -60,3 +62,20 @@ código/specs já implementados (Fases 2-5 e 8 concluídas, mas ainda marcadas "
 tarefa de consolidação de documentação. A concorrência aprofundada (Fase 7) já tem mecanismo implementado
 (D024) desde a spec 006; o que resta dessa fase é a resposta de entrevista/documento arquitetural curto
 mencionado no PRD §05, ainda não escrito separadamente do que já existe em `docs/DECISIONS.md`.
+
+**Nota sobre numeração de specs/prompts (2026-07-12):** as Fases 5b/5c (redesign visual + administração
+de usuários) não estavam no plano original — foram inseridas depois de ver o resultado da Fase 5, e
+consumiram os números `specs/009` e `specs/010`. Isso significa que as Fases 6, 7 (e qualquer prompt/spec
+já rascunhado para elas antes desta inserção, ex: um rascunho em `.prompts/` que citava
+`specs/009-consolidacao-testes.md`) precisam ser renumeradas para `specs/011`, `specs/012`, etc. — **não**
+para `009`/`010`, que já existem e estão fechados. Ao dar continuidade às Fases 6/7/8, confirme o próximo
+número livre com `ls specs/` antes de criar o arquivo.
+
+**Risco de defasagem da Fase 8 (2026-07-12):** a Fase 8 foi marcada "Concluída" com base no estado do
+README após a Fase 5b (spec 009) — mas a spec 010 (Fase 5c), quando implementada, vai adicionar uma tela
+nova (administração de usuários/papéis) e uma mudança de configuração do Keycloak
+(`serviceAccountsEnabled` no client `gestao-backend`) que o README **ainda não descreve**, porque a
+funcionalidade não existe em código ainda. A própria spec 010 já lista "README atualizado" na sua
+Definition of Done (seção 9) — ou seja, a Fase 8 vai precisar ser reaberta (ou tratada como "concluída
+por fase, não globalmente") no momento em que a spec 010 for implementada. Não é um erro atual, é um
+lembrete para não deixar o README ficar defasado de novo quando isso acontecer.

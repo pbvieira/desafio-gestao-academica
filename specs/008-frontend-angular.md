@@ -62,13 +62,13 @@ consistente sobre polimento visual, dado o orçamento de tempo apertado desta fa
 Esta fase não cria nem altera regra de negócio (todas já fechadas em Fases 3/4) — a UI reflete e reforça
 visualmente as regras já garantidas pelo backend:
 
-- [ ] Aluno só pode se matricular em turmas com status `ABERTA` e vagas disponíveis — UI mostra essa
+- [x] Aluno só pode se matricular em turmas com status `ABERTA` e vagas disponíveis — UI mostra essa
   informação antes da ação, mas a validação real é sempre do backend.
-- [ ] Conflito de vaga concorrente (409, `VAGAS_ESGOTADAS`/`CONFLITO_CONCORRENCIA`) tratado como UX de
+- [x] Conflito de vaga concorrente (409, `VAGAS_ESGOTADAS`/`CONFLITO_CONCORRENCIA`) tratado como UX de
   primeira classe, não um alerta genérico de erro.
-- [ ] Papéis RBAC (ALUNO, SECRETARIA, ADMIN) determinam quais telas/ações aparecem — a UI nunca oferece uma
+- [x] Papéis RBAC (ALUNO, SECRETARIA, ADMIN) determinam quais telas/ações aparecem — a UI nunca oferece uma
   ação que sempre falharia com 403 para o usuário logado.
-- [ ] ALUNO só visualiza/cancela as próprias matrículas; SECRETARIA/ADMIN confirma matrículas de qualquer
+- [x] ALUNO só visualiza/cancela as próprias matrículas; SECRETARIA/ADMIN confirma matrículas de qualquer
   aluno — espelha o ABAC já implementado no backend (specs/003).
 
 ## 4. Abordagem técnica

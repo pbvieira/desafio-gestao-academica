@@ -1,6 +1,6 @@
 # 007 — Mensageria assíncrona real: externalização para RabbitMQ
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §04 (mensageria assíncrona real, consumidor em módulo separado),
 §07 (diferenciais: idempotência, observabilidade de mensageria)
 **Módulo(s) Modulith afetado(s):** `academico` (eventos ganham `@Externalized` + `eventId`); `notificacao`
