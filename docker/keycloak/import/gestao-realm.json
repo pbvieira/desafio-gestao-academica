@@ -40,6 +40,14 @@
       "lastName": "Teste",
       "credentials": [{ "type": "password", "value": "admin123", "temporary": false }],
       "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "service-account-gestao-backend",
+      "enabled": true,
+      "serviceAccountClientId": "gestao-backend",
+      "clientRoles": {
+        "realm-management": ["view-users", "manage-users", "query-users"]
+      }
     }
   ],
   "clients": [
@@ -56,10 +64,10 @@
       "clientId": "gestao-backend",
       "enabled": true,
       "publicClient": false,
-      "secret": "${env.KEYCLOAK_BACKEND_CLIENT_SECRET}",
+      "secret": "${KEYCLOAK_BACKEND_CLIENT_SECRET}",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false
+      "serviceAccountsEnabled": true
     }
   ]
 }

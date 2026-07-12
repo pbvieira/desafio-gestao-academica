@@ -63,9 +63,22 @@ services:
       - 'KC_DB_USERNAME=${KEYCLOAK_DB_USER:-keycloak_app}'
       - 'KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:?defina KEYCLOAK_DB_PASSWORD no .env (veja .env.example)}'
       # Lido pelo realm export (docker/keycloak/import/gestao-realm.json) via
-      # ${env.KEYCLOAK_BACKEND_CLIENT_SECRET} - achado de security review (D013): evita
+      # ${KEYCLOAK_BACKEND_CLIENT_SECRET} - achado de security review (D013): evita
       # o mesmo valor fixo em texto claro em todo clone do repositório.
       - 'KEYCLOAK_BACKEND_CLIENT_SECRET=${KEYCLOAK_BACKEND_CLIENT_SECRET:?defina KEYCLOAK_BACKEND_CLIENT_SECRET no .env (veja .env.example)}'
+      # Sem isto, o Keycloak importa "${VAR}" do realm JSON como string literal, não como
+      # placeholder resolvido - achado da Task 1 (specs de administração de
+      # usuários/papéis, via engenharia reversa do bytecode de
+      # org.keycloak.exportimport.AbstractFileBasedImportProvider): a substituição de
+      # placeholders no --import-realm é controlada pela system property
+      # keycloak.migration.replace-placeholders (default false, não é automática só por o
+      # valor estar no formato ${VAR}); e o resolver de env var
+      # (AbstractFileBasedImportProvider$1) chama System.getenv() com o conteúdo entre
+      # chaves ao pé da letra, sem baixar prefixo "env." - por isso o placeholder no JSON
+      # é "${KEYCLOAK_BACKEND_CLIENT_SECRET}", não "${env.KEYCLOAK_BACKEND_CLIENT_SECRET}"
+      # (essa segunda forma é convenção do Spring/Quarkus para property sources, não deste
+      # resolver específico do Keycloak).
+      - 'JAVA_OPTS_APPEND=-Dkeycloak.migration.replace-placeholders=true'
     volumes:
       - ./docker/keycloak/import:/opt/keycloak/data/import:ro
     ports:
