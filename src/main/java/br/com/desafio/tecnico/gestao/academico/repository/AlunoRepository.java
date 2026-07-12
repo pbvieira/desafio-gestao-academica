@@ -35,4 +35,11 @@ public interface AlunoRepository extends JpaRepository<Aluno, Long> {
 	@Query("SELECT a.keycloakSubjectId FROM Aluno a WHERE a.id = :alunoId")
 	Optional<String> findKeycloakSubjectIdById(@Param("alunoId") Long alunoId);
 
+	/**
+	 * D041 em docs/DECISIONS.md: lookup reverso (subject Keycloak -> Aluno) para o
+	 * endpoint de autoleitura GET /api/alunos/me - sem isso, o frontend (Fase 5) não
+	 * tem como o próprio ALUNO descobrir seu alunoId para se matricular.
+	 */
+	Optional<Aluno> findByKeycloakSubjectIdAndAtivoTrue(String keycloakSubjectId);
+
 }

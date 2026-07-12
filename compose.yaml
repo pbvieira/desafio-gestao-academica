@@ -27,7 +27,11 @@ services:
   # Mensageria de domínio (D002: RabbitMQ em vez de Kafka). A porta AMQP (5672) fica
   # efêmera — a aplicação a descobre automaticamente via spring-boot-docker-compose, como
   # já acontece com postgres/redis. A porta da management UI é fixada via variável de
-  # ambiente porque é de uso humano (inspeção manual de filas/mensagens).
+  # ambiente porque é de uso humano (inspeção manual de filas/mensagens) — só em loopback,
+  # mesmo padrão de todo outro console admin deste compose (achado de security review,
+  # specs/007 §8/D035: o console de management do RabbitMQ concede administração completa
+  # do broker, não só leitura de filas — publicado sem restrição, era o único console
+  # admin do compose.yaml aberto para além de localhost).
   rabbitmq:
     image: 'rabbitmq:4.1-management'
     environment:
@@ -35,7 +39,7 @@ services:
       - 'RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?defina RABBITMQ_DEFAULT_PASS no .env (veja .env.example)}'
     ports:
       - '5672'
-      - '${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
+      - '127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 5s

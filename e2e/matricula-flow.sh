@@ -25,6 +25,8 @@ fi
 
 KEYCLOAK_HTTP_PORT="${KEYCLOAK_HTTP_PORT:-8081}"
 APP_PORT="${APP_PORT:-8080}"
+POSTGRES_USER="${POSTGRES_USER:-myuser}"
+POSTGRES_DB="${POSTGRES_DB:-mydatabase}"
 KC="http://localhost:${KEYCLOAK_HTTP_PORT}"
 APP="http://localhost:${APP_PORT}"
 TMP_DIR="$(mktemp -d)"
@@ -87,6 +89,26 @@ esperar_status() {
 	else
 		log_falha "$descricao (esperado HTTP $esperado, obtido HTTP $obtido)"
 	fi
+}
+
+# specs/007-mensageria-rabbitmq.md, seção 4.6/D035: consulta direta ao Postgres do
+# compose (mesmo container que a aplicação usa) para confirmar que o consumidor real
+# (RabbitMQ, não mais @ApplicationModuleListener interno da Fase 3) processou os
+# eventos de domínio e gravou o registro de idempotência - sem isso, o e2e só provaria
+# a API REST, não a mensageria assíncrona de verdade.
+aguardar_evento_processado() {
+	local descricao="$1" minimo_esperado="$2" tentativas=15
+	for _ in $(seq 1 "$tentativas"); do
+		local contagem
+		contagem=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+			"SELECT COUNT(*) FROM evento_processado" 2>/dev/null | tr -d '[:space:]')
+		if [ -n "$contagem" ] && [ "$contagem" -ge "$minimo_esperado" ]; then
+			log_ok "$descricao (evento_processado tem $contagem registro(s))"
+			return 0
+		fi
+		sleep 1
+	done
+	log_falha "$descricao (evento_processado não chegou a $minimo_esperado registro(s) em ${tentativas}s)"
 }
 
 echo "== E2E: fluxo de Matrícula (criar -> confirmar -> duplicidade -> cancelar -> vaga liberada) =="
@@ -184,6 +206,11 @@ if [ "$VAGAS_OCUPADAS" = "0" ]; then
 else
 	log_falha "vaga liberada (esperado vagasOcupadas=0, obtido '${VAGAS_OCUPADAS}')"
 fi
+
+# criar + confirmar + cancelar publicam 3 eventos (MatriculaCriada/Confirmada/Cancelada);
+# execuções anteriores do script (idempotente, ver acima) podem já ter deixado outros
+# registros na tabela - por isso o mínimo é ">= 3", não "== 3".
+aguardar_evento_processado "consumidor RabbitMQ processou os eventos desta execução (idempotência)" 3
 
 echo "=================================="
 if [ "$falhas" -eq 0 ]; then

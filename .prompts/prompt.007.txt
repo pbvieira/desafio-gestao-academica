@@ -1,0 +1,91 @@
+Vamos iniciar a FASE 4 do sistema de gestão de matrículas acadêmicas, seguindo o fluxo do
+CLAUDE.md. Esta fase externaliza para o RabbitMQ os eventos de domínio que a Fase 3 já
+publica internamente via Spring Modulith (MatriculaCriada, MatriculaConfirmada,
+MatriculaCancelada) e implementa a mensageria assíncrona real exigida pelo PRD para nível
+sênior, com o consumidor rodando em módulo separado.
+
+CONTEXTO: D002 em docs/DECISIONS.md já justifica RabbitMQ em vez de Kafka. Esta fase é onde
+essa decisão se concretiza em código — não reabra a discussão, apenas implemente sobre ela.
+
+ESCOPO DESTA FASE:
+
+1. Externalização dos eventos Modulith para RabbitMQ
+   - Adicionar spring-modulith-events-amqp (ou equivalente) ao pom.xml para que os eventos
+     já publicados via ApplicationEventPublisher na Fase 3 sejam externalizados
+     automaticamente para o RabbitMQ, sem reescrever a lógica de publicação.
+   - Modelar a topologia: exchange (avalie topic vs. direct — topic permite roteamento por
+     padrão tipo "matricula.criada", "matricula.confirmada", "matricula.cancelada", o que
+     facilita adicionar novos consumidores no futuro sem tocar no publisher), fila(s) de
+     destino, binding. Registre a escolha da topologia.
+   - Adicionar o RabbitMQ ao pom.xml/configuração da aplicação (spring-boot-starter-amqp),
+     usando as credenciais via variável de ambiente já padronizadas na Fase 1.4.
+
+2. Outbox Pattern via Event Publication Registry do Spring Modulith
+   - Habilitar a persistência de publicação de eventos (tabela de outbox do Modulith) e
+     `republish-outstanding-events-on-restart=true`, garantindo que, se a aplicação cair
+     entre persistir a Matrícula e publicar o evento, o evento não se perde — é reenviado
+     no próximo start.
+   - Escrever a migration Flyway correspondente à tabela do Event Publication Registry
+     (o Modulith fornece o schema, mas confirme se precisa de migration própria ou se é
+     gerenciado automaticamente — registre o que for descoberto).
+   - Teste de integração simulando falha entre persistência e publicação (ex: derrubar o
+     listener/consumidor e confirmar que o evento incompleto é reenviado no restart).
+
+3. Retry e Dead Letter Queue (nativos do RabbitMQ)
+   - Configurar Dead Letter Exchange para a(s) fila(s) de consumo: mensagem que falha no
+     processamento (exceção no listener) vai para uma fila de retry com TTL antes de
+     retornar à fila principal, e após N tentativas (defina e registre o número) vai para
+     uter fila DLQ final, não perdida silenciosamente.
+   - Definir e registrar a estratégia de backoff (TTL fixo vs. incremental) — dado o prazo,
+     TTL fixo simples é aceitável, mas registre isso como decisão consciente, não omissão.
+   - Um endpoint ou log estruturado que permita inspecionar o que caiu na DLQ (mínimo:
+     visível via RabbitMQ Management UI já exposta na Fase 1 — confirme que está acessível
+     e documente como consultar no README).
+
+4. Consumidor no módulo secundário + idempotência
+   - O listener do módulo secundário (que na Fase 3 era um @ApplicationModuleListener
+     interno) passa a consumir da fila RabbitMQ real.
+   - Idempotência: criar tabela de eventos processados (dedupe por ID do evento) para que
+     um redelivery do broker (ex: após falha de ack) não gere processamento duplicado —
+     este é o exemplo que já está documentado como referência no SKILL.md de decision-log;
+     siga esse padrão.
+   - Ação do consumidor pode continuar sendo o log estruturado "notificação seria enviada
+     aqui" da Fase 3 — não é escopo desta fase implementar notificação real, é escopo
+     garantir que o consumo é confiável e idempotente.
+
+5. Observabilidade da mensageria
+   - Garantir que o correlation ID/trace ID da requisição HTTP original que originou o
+     evento se propaga até o log do consumidor (avalie se isso significa propagar o traceId
+     como header da mensagem AMQP) — sem isso, um evento na DLQ não é rastreável até a
+     requisição que o gerou, o que enfraquece a resposta pronta para "como você trata falha
+     de mensageria" nas perguntas do PRD/entrevista.
+   - Métrica básica (Micrometer) de mensagens publicadas, consumidas e enviadas à DLQ,
+     visível no Prometheus/Grafana já configurados na Fase 1.
+
+FORA DO ESCOPO desta fase: notificação real (e-mail/push) no consumidor, múltiplos
+consumidores/filas para diferentes finalidades (um consumidor de referência é suficiente
+para provar o mecanismo), qualquer lógica de domínio nova de Matrícula (isso já fechou na
+Fase 3).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Crie specs/007-mensageria-rabbitmq.md a partir do template, cobrindo os itens acima.
+2. Levante via skill decision-log, ANTES de implementar: (a) topic vs. direct exchange;
+   (b) número de tentativas de retry e estratégia de TTL/backoff; (c) forma de propagar
+   trace ID no header AMQP; (d) qualquer outra decisão não-trivial identificada.
+3. Após spec aprovada e decisões registradas em docs/DECISIONS.md, implemente.
+4. Valide manualmente: publique um evento de verdade (via fluxo real de matrícula), force
+   uma falha no consumidor (ex: lance exceção deliberada temporária) e confirme que a
+   mensagem passa por retry e cai na DLQ após esgotar tentativas, visível no RabbitMQ
+   Management UI. Depois confirme que reenviar a mesma mensagem manualmente não duplica o
+   processamento (idempotência funcionando).
+5. Atualize o e2e da Fase 3 (specs/006) ou crie um novo em e2e/ cobrindo: criar matrícula →
+   evento publicado → consumidor processa → registro de idempotência criado. Esse e2e entra
+   no CI já configurado.
+6. Rode code-reviewer e security-auditor sobre o diff — atenção especial a: credenciais do
+   RabbitMQ não hardcoded (reaproveitar .env da Fase 1.4), payload da mensagem AMQP não
+   vazando dados sensíveis desnecessários, e se a fila/exchange está acessível sem
+   autenticação dentro da rede do compose (aceitável em dev, mas registre como risco
+   conhecido a mitigar em produção).
+7. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

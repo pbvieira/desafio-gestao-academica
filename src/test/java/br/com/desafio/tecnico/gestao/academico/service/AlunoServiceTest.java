@@ -163,4 +163,24 @@ class AlunoServiceTest {
 		verify(alunoRepository, never()).delete(any());
 	}
 
+	@Test
+	void buscarPorKeycloakSubjectId_vinculado_retornaAluno() {
+		Aluno existente = new Aluno();
+		existente.setId(1L);
+		existente.setKeycloakSubjectId("sub-123");
+		when(alunoRepository.findByKeycloakSubjectIdAndAtivoTrue("sub-123")).thenReturn(Optional.of(existente));
+
+		Aluno aluno = alunoService.buscarPorKeycloakSubjectId("sub-123");
+
+		assertThat(aluno.getId()).isEqualTo(1L);
+	}
+
+	@Test
+	void buscarPorKeycloakSubjectId_semVinculo_lancaRecursoNaoEncontrado() {
+		when(alunoRepository.findByKeycloakSubjectIdAndAtivoTrue("sub-desconhecido")).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> alunoService.buscarPorKeycloakSubjectId("sub-desconhecido"))
+				.isInstanceOf(RecursoNaoEncontradoException.class);
+	}
+
 }

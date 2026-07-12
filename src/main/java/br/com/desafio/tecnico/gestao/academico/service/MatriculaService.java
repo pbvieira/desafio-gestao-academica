@@ -2,7 +2,10 @@ package br.com.desafio.tecnico.gestao.academico.service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,13 +37,28 @@ public class MatriculaService {
 	private final TurmaRepository turmaRepository;
 	private final AlunoRepository alunoRepository;
 	private final ApplicationEventPublisher eventPublisher;
+	private final Tracer tracer;
 
 	public MatriculaService(MatriculaRepository matriculaRepository, TurmaRepository turmaRepository,
-			AlunoRepository alunoRepository, ApplicationEventPublisher eventPublisher) {
+			AlunoRepository alunoRepository, ApplicationEventPublisher eventPublisher, Tracer tracer) {
 		this.matriculaRepository = matriculaRepository;
 		this.turmaRepository = turmaRepository;
 		this.alunoRepository = alunoRepository;
 		this.eventPublisher = eventPublisher;
+		this.tracer = tracer;
+	}
+
+	/**
+	 * D034: precisa ser capturado AQUI - na thread da requisição HTTP original, antes de
+	 * publishEvent() devolver o controle ao Modulith - porque a externalização para o
+	 * RabbitMQ roda depois, de forma assíncrona numa thread separada sem o contexto de
+	 * span desta requisição (achado empírico: um `MessagePostProcessor` no
+	 * `RabbitTemplate`, que só roda no momento do publish assíncrono, sempre viu
+	 * `tracer.currentSpan() == null`).
+	 */
+	private String traceIdAtual() {
+		Span spanAtual = tracer.currentSpan();
+		return spanAtual != null ? spanAtual.context().traceId() : null;
 	}
 
 	@Transactional
@@ -65,7 +83,8 @@ public class MatriculaService {
 		matricula.setAluno(aluno);
 		matricula.setTurma(turma);
 		matricula = matriculaRepository.save(matricula);
-		eventPublisher.publishEvent(new MatriculaCriada(matricula.getId(), aluno.getId(), turma.getId()));
+		eventPublisher.publishEvent(new MatriculaCriada(UUID.randomUUID(), traceIdAtual(), matricula.getId(),
+				aluno.getId(), turma.getId()));
 		return matricula;
 	}
 
@@ -105,7 +124,8 @@ public class MatriculaService {
 		Matricula matriculaGerenciada = buscarPorId(id);
 		matriculaGerenciada.setStatus(StatusMatricula.CONFIRMADA);
 		matriculaGerenciada.setConfirmadoEm(Instant.now());
-		eventPublisher.publishEvent(new MatriculaConfirmada(matriculaGerenciada.getId()));
+		eventPublisher.publishEvent(
+				new MatriculaConfirmada(UUID.randomUUID(), traceIdAtual(), matriculaGerenciada.getId()));
 		return matriculaGerenciada;
 	}
 
@@ -126,7 +146,8 @@ public class MatriculaService {
 		Matricula matriculaGerenciada = buscarPorId(id);
 		matriculaGerenciada.setStatus(StatusMatricula.CANCELADA);
 		matriculaGerenciada.setCanceladoEm(Instant.now());
-		eventPublisher.publishEvent(new MatriculaCancelada(matriculaGerenciada.getId(), liberouVaga));
+		eventPublisher.publishEvent(new MatriculaCancelada(UUID.randomUUID(), traceIdAtual(),
+				matriculaGerenciada.getId(), liberouVaga));
 		return matriculaGerenciada;
 	}
 

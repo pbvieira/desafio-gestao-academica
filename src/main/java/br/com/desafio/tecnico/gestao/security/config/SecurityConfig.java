@@ -1,6 +1,7 @@
 package br.com.desafio.tecnico.gestao.security.config;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,9 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import br.com.desafio.tecnico.gestao.security.support.KeycloakClaims;
 
@@ -81,7 +85,8 @@ public class SecurityConfig {
 	@Bean
 	@Order(2)
 	SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationEntryPoint authenticationEntryPoint,
-			AccessDeniedHandler accessDeniedHandler) throws Exception {
+			AccessDeniedHandler accessDeniedHandler, CorsConfigurationSource corsConfigurationSource)
+			throws Exception {
 		http.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers("/actuator/health/**").permitAll()
 				.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -90,9 +95,31 @@ public class SecurityConfig {
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
 						.authenticationEntryPoint(authenticationEntryPoint))
 				.exceptionHandling(exceptions -> exceptions.accessDeniedHandler(accessDeniedHandler))
+				.cors(cors -> cors.configurationSource(corsConfigurationSource))
 				.csrf(AbstractHttpConfigurer::disable)
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 		return http.build();
+	}
+
+	/**
+	 * Requisito técnico, não decisão com alternativas (specs/008-frontend-angular.md,
+	 * achado durante a validação manual): o frontend Angular (D039) roda em origem
+	 * diferente da API (`ng serve` em :4200, API em :8080) - sem CORS explícito, o
+	 * browser bloqueia toda chamada por padrão (same-origin policy), independente do
+	 * Bearer token estar correto. Origem restrita à conhecida do client
+	 * `gestao-frontend` no realm Keycloak (mesma já registrada em `redirectUris`/
+	 * `webOrigins`, docker/keycloak/import/gestao-realm.json), não um wildcard.
+	 */
+	@Bean
+	CorsConfigurationSource corsConfigurationSource(
+			@Value("${app.frontend.origin:http://localhost:4200}") String frontendOrigin) {
+		CorsConfiguration configuration = new CorsConfiguration();
+		configuration.setAllowedOrigins(List.of(frontendOrigin));
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+		configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", configuration);
+		return source;
 	}
 
 	/**

@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,9 +27,9 @@ import br.com.desafio.tecnico.gestao.academico.service.MatriculaService;
 /**
  * CRUD de Aluno (criar/editar/listar/buscar/excluir) restrito a SECRETARIA/ADMIN
  * (@PreAuthorize de classe, specs/005 seção 4.4) - consultar/listar dados de outros
- * alunos não é algo que um ALUNO deveria poder fazer livremente. listarMatriculas é a
- * exceção: sobrescreve a restrição de classe com ABAC (specs/006, D030) - primeiro uso
- * real do vínculo Keycloak<->Aluno (D006/D030).
+ * alunos não é algo que um ALUNO deveria poder fazer livremente. listarMatriculas e
+ * meuPerfil são as exceções: sobrescrevem a restrição de classe (ABAC/autoleitura,
+ * D030/D041) - uso do vínculo Keycloak<->Aluno (D006/D030).
  */
 @RestController
 @RequestMapping("/api/alunos")
@@ -62,6 +64,21 @@ public class AlunoController {
 	@GetMapping("/{id}")
 	public AlunoResponse buscar(@PathVariable Long id) {
 		return AlunoResponse.de(alunoService.buscarAtivo(id));
+	}
+
+	/**
+	 * D041 em docs/DECISIONS.md: sobrescreve o @PreAuthorize de classe (staff-only) -
+	 * qualquer usuário autenticado pode descobrir o próprio Aluno vinculado ao seu
+	 * subject Keycloak. Achado durante a Fase 5 (frontend): sem isto, o ALUNO não tinha
+	 * como descobrir seu alunoId para se matricular (POST /api/matriculas exige
+	 * alunoId), nem como consultar as próprias matrículas - a única forma de "provar"
+	 * quem é o Aluno correspondente ao usuário logado. Mapeado como literal "/me", que o
+	 * Spring resolve antes de "/{id}" (path variable), sem ambiguidade de rota.
+	 */
+	@GetMapping("/me")
+	@PreAuthorize("isAuthenticated()")
+	public AlunoResponse meuPerfil(@AuthenticationPrincipal Jwt jwt) {
+		return AlunoResponse.de(alunoService.buscarPorKeycloakSubjectId(jwt.getSubject()));
 	}
 
 	@DeleteMapping("/{id}")

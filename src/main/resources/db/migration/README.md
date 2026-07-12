@@ -7,7 +7,9 @@ usadas pelo mecanismo de proteção de vaga sob concorrência (D024/D025). `V8` 
 spec 006, mas não é dado de nenhum módulo de domínio — cria `event_publication`, a
 tabela interna do Spring Modulith (`spring-modulith-events-jpa`) para o registro de
 publicação de eventos de domínio (`@ApplicationModuleListener`, D029), rotulada
-`infraestrutura` na convenção abaixo por ser cross-cutting.
+`infraestrutura` na convenção abaixo por ser cross-cutting. `V9` é da spec 007
+(mensageria RabbitMQ) — cria `evento_processado`, tabela de dedupe de idempotência do
+consumidor real (`@RabbitListener`, D035).
 
 ## Convenção de nomenclatura (D015 em docs/DECISIONS.md)
 

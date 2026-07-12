@@ -3,6 +3,7 @@ package br.com.desafio.tecnico.gestao.academico.service;
 import java.util.List;
 import java.util.Optional;
 
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -50,6 +51,9 @@ class MatriculaServiceTest {
 
 	@Mock
 	private ApplicationEventPublisher eventPublisher;
+
+	@Mock
+	private Tracer tracer;
 
 	@InjectMocks
 	private MatriculaService matriculaService;

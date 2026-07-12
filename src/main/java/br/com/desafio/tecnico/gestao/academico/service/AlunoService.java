@@ -102,6 +102,17 @@ public class AlunoService {
 				.orElseThrow(() -> new RecursoNaoEncontradoException("Aluno com id '" + id + "' não encontrado."));
 	}
 
+	/**
+	 * D041 em docs/DECISIONS.md: autoleitura para o frontend (Fase 5) - o próprio
+	 * ALUNO não tem outro meio de descobrir seu alunoId (necessário para se
+	 * matricular) a partir do token Keycloak.
+	 */
+	@Transactional(readOnly = true)
+	public Aluno buscarPorKeycloakSubjectId(String keycloakSubjectId) {
+		return alunoRepository.findByKeycloakSubjectIdAndAtivoTrue(keycloakSubjectId).orElseThrow(
+				() -> new RecursoNaoEncontradoException("Nenhum Aluno vinculado ao usuário autenticado."));
+	}
+
 	@Transactional
 	public void excluir(Long id) {
 		Aluno aluno = buscarAtivo(id);
