@@ -46,10 +46,9 @@ ponto do desenvolvimento.
 | 4 | Mensageria de domínio: publicar `MatriculaCriada`/`Confirmada`/`Cancelada` no RabbitMQ (infraestrutura já de pé desde a Fase 1) + consumidor no módulo secundário + DLQ/retry | **Concluída** — spec 007 |
 | 5 | Frontend Angular mínimo: telas dos fluxos principais, consumo da API, tratamento de erro | **Concluída** — spec 008 |
 | 5b *(fora do plano original)* | Redesign visual do frontend (nova identidade "Institucional acadêmico" + sidebar) — diferencial pedido pelo Pablo após ver o resultado da Fase 5, não estava no plano original | **Concluída** — spec 009 |
-| 5c *(fora do plano original)* | Administração de usuários/papéis (tela ADMIN-only para reatribuir papel via Keycloak Admin API) — diferencial pedido junto com a 5b | **Aprovada, não implementada** — spec 010 |
-| 6 | Testes: completar unit/integration faltantes, e2e dos fluxos principais de negócio, manter cobertura ≥ 80% (gate JaCoCo já ativo desde a Fase 1) | Pendente — spec ainda não criada (será `specs/011-*`, não `specs/009-*` — ver nota abaixo) |
-| 7 | Concorrência aprofundada — estratégia final (otimista/pessimista/constraint), teste de disputa pela última vaga, decisão documentada, resposta de entrevista pronta | Pendente — mecanismo já implementado (D024); falta só o documento/resposta de entrevista |
-| 8 | Documentação final: completar o `README.md` (já existe uma versão inicial, criada na Fase 1) com uso de IA, decisões técnicas, como a vaga é protegida, como a concorrência é tratada | **Concluída para o estado atual** — ver nota abaixo sobre por que isso vai ficar defasado de novo quando a spec 010 for implementada |
+| 5c *(fora do plano original)* | Administração de usuários/papéis (tela ADMIN-only para reatribuir papel via Keycloak Admin API) — diferencial pedido junto com a 5b | **Em andamento** — spec 010, plano em execução |
+| 6 *(unifica as antigas 6+7 — decisão do Pablo, 2026-07-12)* | Testes consolidados + concorrência aprofundada num único ciclo, com a prova e2e da disputa pela última vaga (20 alunos, via confirmação concorrente) como prioridade 1, não como item de auditoria genérica. Comparação com lock pessimista simplificada (sem benchmark de carga elaborado) — ver `.prompts/prompt.009.txt` (reescrito) e a nota "Fase 6 unificada" abaixo | Pendente |
+| 7 *(renomeada da antiga Fase 8 — decisão do Pablo, 2026-07-12)* | Finalização: documento arquitetural curto (PRD §04, deliverable distinto do README que ainda não existe como arquivo próprio), revisão final de consistência entre README/ROADMAP/DECISIONS/specs, checklist literal do PRD §06/§08, gate e2e completo, "pitch" de entrevista consolidado — ver `.prompts/prompt.010.txt` (reescrito) e a nota "Fase 7 reimaginada" abaixo | Pendente |
 
 **Nota para a entrevista:** a inversão de prioridade (diferenciais antes do obrigatório) é
 o tipo de decisão a explicar com transparência, não a esconder — o trade-off e o motivo de
@@ -59,46 +58,51 @@ são o que efetivamente decide a régua de avaliação do PRD (§06, critérios 
 
 **Nota de reconciliação (2026-07-12):** os status desta tabela estavam desatualizados em relação ao
 código/specs já implementados (Fases 2-5 e 8 concluídas, mas ainda marcadas "Pendente") — corrigido numa
-tarefa de consolidação de documentação. A concorrência aprofundada (Fase 7) já tem mecanismo implementado
-(D024) desde a spec 006; o que resta dessa fase é a resposta de entrevista/documento arquitetural curto
-mencionado no PRD §05, ainda não escrito separadamente do que já existe em `docs/DECISIONS.md`.
+tarefa de consolidação de documentação. A concorrência aprofundada já tem mecanismo implementado (D024)
+desde a spec 006; o que resta é a resposta de entrevista/documento arquitetural curto mencionado no PRD
+§05, ainda não escrito separadamente do que já existe em `docs/DECISIONS.md`.
 
 **Nota sobre numeração de specs/prompts (2026-07-12):** as Fases 5b/5c (redesign visual + administração
 de usuários) não estavam no plano original — foram inseridas depois de ver o resultado da Fase 5, e
-consumiram os números `specs/009` e `specs/010`. Isso significa que as Fases 6, 7 (e qualquer prompt/spec
-já rascunhado para elas antes desta inserção, ex: um rascunho em `.prompts/` que citava
-`specs/009-consolidacao-testes.md`) precisam ser renumeradas para `specs/011`, `specs/012`, etc. — **não**
-para `009`/`010`, que já existem e estão fechados. Ao dar continuidade às Fases 6/7/8, confirme o próximo
-número livre com `ls specs/` antes de criar o arquivo.
+consumiram os números `specs/009` e `specs/010`. Isso significa que a Fase 6 (unificada) e a Fase 7
+(renomeada) precisam ser numeradas a partir de `specs/011` — **não** `009`/`010`, que já existem e estão
+fechados/em andamento. Ao dar continuidade, confirme o próximo número livre com `ls specs/` antes de criar
+o arquivo.
 
-**Achado crítico no rascunho da Fase 7 (2026-07-12), antes de executar:** o rascunho em
-`.prompts/prompt.010.txt` descreve o cenário de prova real como "20 alunos tentando se matricular
-simultaneamente, 1 sucesso, 19 recebem 409 de vaga" e planeja isolar Direct Access Grant num
-client/realm de teste separado para autenticar os 20 alunos. Duas premissas verificadas no código atual
-(`MatriculaService.java`, `PerfilPermissionEvaluator.java`) mostram que isso não corresponde à
-implementação real:
-1. `criar()` (matricular-se) nunca verifica vaga — só `confirmar()` faz o `UPDATE` condicional de D024, e
-   `confirmar()` é restrito a SECRETARIA/ADMIN (D027). A disputa pela vaga acontece na confirmação, não na
-   matrícula em si — "20 alunos se matriculando" nunca geraria um 409 de vaga.
-2. `permitirAluno()` libera `MATRICULAR` para qualquer staff (`isStaff(authentication) -> true`) —
-   ou seja, um único usuário SECRETARIA/ADMIN já existente pode criar as 20 matrículas PENDENTES em nome
-   de 20 Alunos distintos (staff-only, sem precisar de login desses alunos) e depois disparar as 20
-   confirmações concorrentes ele mesmo. Não são necessários 20 usuários Keycloak novos, nem isolar
-   Direct Access Grant em um client/realm de teste — esse grant já está habilitado no client de produção
-   `gestao-frontend` (D036, achado do security-auditor da spec 008, risco já aceito), reaproveitado pelo
-   `secretaria.teste` já existente.
-   Também: item 1 do rascunho lista "UPDATE atômico condicional" como uma das *duas estratégias novas* a
-   implementar para comparação — mas essa estratégia já é a implementação real em produção desde a spec
-   006 (D024/D025, confirmado em `TurmaRepository.java`). Só o lock pessimista é, de fato, uma
-   implementação nova para a Fase 7.
-   Reflita essas duas correções na spec da Fase 7 antes de implementar o cenário e2e/a comparação de
-   estratégias.
+**Fase 6 unificada (2026-07-12, decisão do Pablo):** as antigas Fases 6 (testes/cobertura) e 7
+(concorrência aprofundada) foram fundidas em uma única Fase 6, simplificada, com a prova e2e de disputa
+pela última vaga como prioridade 1 (não mais um item de auditoria genérica entre outros). `.prompts/
+prompt.009.txt` foi reescrito para refletir isso — inclui também o achado crítico abaixo, já corrigido no
+texto reescrito, preservado aqui só como registro de por que o desenho do teste é o que é:
 
-**Risco de defasagem da Fase 8 (2026-07-12):** a Fase 8 foi marcada "Concluída" com base no estado do
-README após a Fase 5b (spec 009) — mas a spec 010 (Fase 5c), quando implementada, vai adicionar uma tela
-nova (administração de usuários/papéis) e uma mudança de configuração do Keycloak
-(`serviceAccountsEnabled` no client `gestao-backend`) que o README **ainda não descreve**, porque a
-funcionalidade não existe em código ainda. A própria spec 010 já lista "README atualizado" na sua
-Definition of Done (seção 9) — ou seja, a Fase 8 vai precisar ser reaberta (ou tratada como "concluída
-por fase, não globalmente") no momento em que a spec 010 for implementada. Não é um erro atual, é um
-lembrete para não deixar o README ficar defasado de novo quando isso acontecer.
+> O rascunho original (`.prompts/prompt.010.txt`, versão anterior) descrevia o cenário de prova real
+> como "20 alunos tentando se matricular simultaneamente, 1 sucesso, 19 recebem 409 de vaga" e planejava
+> isolar Direct Access Grant num client/realm de teste separado para autenticar os 20 alunos. Duas
+> premissas verificadas no código atual (`MatriculaService.java`, `PerfilPermissionEvaluator.java`)
+> mostraram que isso não corresponde à implementação real: (1) `criar()` (matricular-se) nunca verifica
+> vaga — só `confirmar()` faz o `UPDATE` condicional de D024, e `confirmar()` é restrito a
+> SECRETARIA/ADMIN (D027) — a disputa pela vaga acontece na confirmação, não na matrícula em si; (2)
+> `permitirAluno()` libera `MATRICULAR` para qualquer staff (`isStaff(authentication) -> true`) — um único
+> `secretaria.teste` já existente pode criar as 20 matrículas PENDENTES em nome de 20 Alunos distintos e
+> depois disparar as 20 confirmações concorrentes ele mesmo, sem precisar de 20 usuários Keycloak novos
+> nem isolar Direct Access Grant (esse grant já está habilitado no client de produção `gestao-frontend`,
+> D036, risco já aceito pelo security-auditor da spec 008). Também: "UPDATE atômico condicional" já é a
+> implementação real em produção desde a spec 006 (D024/D025) — só o lock pessimista é, de fato,
+> implementação nova para esta fase.
+
+**Fase 7 reimaginada (2026-07-12, decisão do Pablo):** renomeada da antiga Fase 8. Em vez de só
+"completar o README", o foco passa a ser fechar as lacunas reais que faltam para a entrega: (1) a
+**documentação arquitetural curta** exigida pelo PRD §04 ainda não existe como arquivo próprio (só
+`docs/DECISIONS.md`, que é a fonte granular, e o README, que é operacional — falta a síntese curta que o
+PRD pede como peça distinta); (2) uma passada final de consistência entre README/ROADMAP/DECISIONS/specs
+(mesmo tipo de auditoria feita nesta mesma sessão antes de reestruturar as Fases 6-7-8, mas como
+checklist formal de fechamento, não reativa); (3) checklist literal do PRD §06 (critérios eliminatórios)
+e §08 (como a entrega é avaliada), item por item, com evidência — não assumida por padrão; (4) gate e2e
+completo com tudo que foi construído até aqui (matrícula, mensageria, administração de usuários,
+concorrência de 20 alunos); (5) um "pitch" de entrevista consolidado — índice de perguntas prováveis →
+onde está a resposta pronta, para não precisar procurar sob pressão. `.prompts/prompt.010.txt` foi
+reescrito com esse conteúdo; `.prompts/prompt.011.txt` (rascunho vazio da antiga Fase 8) fica sem uso.
+
+O antigo "risco de defasagem da Fase 8" (README desatualizado até a spec 010/Fase 5c ser implementada)
+está sendo resolvido à medida que a Fase 5c avança nesta mesma sessão — a Fase 7 reimaginada inclui a
+verificação final de que isso de fato aconteceu, não assume.

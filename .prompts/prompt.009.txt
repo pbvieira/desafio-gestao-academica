@@ -1,0 +1,117 @@
+Vamos iniciar a FASE 6 (unificada) do sistema de gestão de matrículas acadêmicas, seguindo
+o fluxo do CLAUDE.md. Esta fase substitui as antigas Fases 6 (testes/cobertura) e 7
+(concorrência aprofundada), fundidas numa só e simplificadas (decisão do Pablo,
+2026-07-12 — ver docs/ROADMAP.md, nota "Fase 6 unificada"). NÃO adiciona funcionalidade
+nova — fecha a lacuna mais crítica de evidência do desafio (prova real de concorrência na
+última vaga, PRD §06) e consolida a cobertura de testes do que já foi implementado.
+
+IMPORTANTE — prioridade invertida em relação ao rascunho original: a prova e2e de
+concorrência (item 1 abaixo) vem PRIMEIRO, não depois de uma auditoria de cobertura. É o
+item mais citado do PRD como critério eliminatório — trate como a entrega principal desta
+fase, não como "mais um item da lista".
+
+IMPORTANTE — desenho do cenário de concorrência, já corrigido (não repita o erro do
+rascunho anterior): a disputa pela vaga acontece na CONFIRMAÇÃO de matrícula
+(`MatriculaService.confirmar()`, `UPDATE` condicional de D024), não na criação
+(`criar()` nunca verifica vaga). Confirmar é restrito a SECRETARIA/ADMIN (D027). Isso
+significa que:
+- Você NÃO precisa de 20 usuários Keycloak novos. Um único `secretaria.teste` (já
+  existente) pode criar os 20 Alunos e as 20 matrículas PENDENTES em nome deles
+  (`permitirAluno()` libera `MATRICULAR` para qualquer staff via `isStaff(...)`), e depois
+  disparar as 20 confirmações concorrentes ele mesmo.
+- Você NÃO precisa isolar Direct Access Grant num client/realm de teste separado — esse
+  grant já está habilitado no client de produção `gestao-frontend` (D036, risco já aceito
+  pelo security-auditor da spec 008). Reaproveite-o.
+- "UPDATE atômico condicional" NÃO é uma estratégia nova a implementar — já é a
+  implementação real em produção desde a spec 006 (D024/D025,
+  `TurmaRepository.consumirVaga`). A única estratégia genuinamente nova desta fase é o
+  lock pessimista, para comparação.
+
+ESCOPO DESTA FASE (nesta ordem de prioridade):
+
+1. PRIORIDADE 1 — Prova real e2e da disputa pela última vaga (20 alunos)
+   - Cenário: SECRETARIA cria 1 curso, 1 disciplina, 1 turma com limite de vagas = 1 e
+     status aberta, e 20 Alunos distintos (via API, não inserção direta no banco).
+   - SECRETARIA cria 20 matrículas PENDENTES, uma por Aluno, nessa turma (POST
+     /api/matriculas, alunoId variando, mesmo token de secretaria.teste).
+   - Dispare as 20 confirmações (POST /api/matriculas/{id}/confirmar) simultaneamente e
+     sincronizadas (todas as chamadas disparadas sem await sequencial entre elas —
+     Promise.all ou equivalente). Use Playwright `APIRequestContext` (HTTP direto, não
+     precisa simular clique em UI) por ser mais rápido e determinístico para esta
+     asserção específica.
+   - Resultado esperado: exatamente 1 das 20 confirmações retorna 200 (sucesso); as
+     outras 19 retornam 409 com `errorCode: VAGAS_ESGOTADAS`. Sem exceção não tratada,
+     sem timeout, sem resultado ambíguo.
+   - Teardown: após o teste (sempre, mesmo em falha), remova a massa de dados criada
+     (matrículas, turma, disciplina, curso, alunos) via chamadas à API — decida e
+     registre o mecanismo exato.
+   - Repetibilidade: identificadores únicos por execução (timestamp/UUID no código do
+     curso/CPF dos alunos), para rodar a suíte 10x seguidas sem colisão. Rode de fato
+     essas 10 execuções antes de considerar a tarefa concluída.
+   - Este teste entra em `e2e/` e no workflow de CI (adicione setup de Node/Playwright ao
+     workflow se ainda não existir).
+
+2. PRIORIDADE 2 — Comparação com lock pessimista (simplificada)
+   - Implemente SÓ a variante pessimista (`@Lock(LockModeType.PESSIMISTIC_WRITE)` no
+     repository), isolada de forma que seja comparável com a estratégia atual (ex: classe
+     de teste separada usando a variante pessimista, sem duplicar o `MatriculaService`
+     inteiro — só o ponto de acesso à Turma precisa variar).
+   - Teste de integração JVM (`ExecutorService`/`CountDownLatch`) comparando as duas
+     estratégias: reaproveite a escala já existente de `MatriculaConcorrenciaIntegrationTest`
+     (2 threads/1 vaga) e escale para N=10, M=1 vaga — não é necessário ir a 50-100
+     threads nem rodar 10x repetidas neste nível (isso é a parte da Fase 7 original que
+     foi deliberadamente cortada — a prova real e definitiva já é o item 1, em HTTP real).
+   - Colete: (a) corretude (exatamente M confirmadas); (b) tempo total do lote; (c)
+     número de exceções de conflito geradas por cada estratégia.
+
+3. PRIORIDADE 3 — Decisão final registrada
+   - Com os números do item 2 e o resultado do item 1 em mãos, registre em
+     `docs/DECISIONS.md` (nova entrada) a comparação real: manter a estratégia atual
+     (`UPDATE` condicional atômico + `@Version`, D024) ou trocar para pessimista — com os
+     números reais coletados, não uma justificativa teórica genérica.
+   - Remova o código da estratégia pessimista do caminho de produção se ela não for a
+     escolhida (pode ficar só no teste de comparação, referenciado pela decisão).
+
+4. PRIORIDADE 4 — Auditoria de cobertura (reduzida, só o que tem sinal real)
+   - Rode `./mvnw clean verify` com o relatório JaCoCo e veja o HTML
+     (target/site/jacoco/index.html) para achar o gap real.
+   - Cubra só: (a) regras de negócio do PRD §02 ainda sem teste, se houver; (b) caminhos
+     de erro (400/401/403/404/409/500) ainda não testados nos módulos novos desta sessão
+     (administracao, se a spec 010 já estiver concluída quando esta fase rodar). NÃO faça
+     uma revisão linha a linha de todos os testes já escritos nas fases anteriores — isso
+     era o item mais pesado do rascunho original e não tem o mesmo retorno que os itens
+     1-3 acima.
+   - Se sobrar cobertura numérica faltando depois disso, cubra classes utilitárias
+     simples — nunca infle com teste de getter/setter do Lombok.
+
+5. PRIORIDADE 5 — Observabilidade do ponto de contenção
+   - Métrica Micrometer contando conflitos de vaga/retries na confirmação de matrícula,
+     visível no Grafana já configurado.
+
+6. Resposta de entrevista preparada
+   - Seção formal na spec: "O que acontece se 20 pessoas tentarem confirmar a última
+     vaga ao mesmo tempo?" — com os números reais dos itens 1 e 2, pronta para ser dita
+     em voz alta sem reler código.
+   - "Como isso mudaria com muitas instituições simultâneas?" (pergunta do PRD) — conecte
+     com D002 (RabbitMQ) e com a decisão do item 3.
+
+FORA DO ESCOPO desta fase: qualquer funcionalidade nova; particionamento/sharding (fica
+como resposta teórica); Gatling/JMeter; reserva de vaga com Redis/TTL (fica como resposta
+teórica, D024 já descarta para a escala real deste sistema); revisão exaustiva de todos
+os testes já escritos nas fases anteriores (item 4 já reduzido acima).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Confirme o próximo número de spec livre com `ls specs/` (não será `009` nem `010`,
+   já existem — provavelmente `011`). Crie `specs/0NN-concorrencia-e-testes.md` a partir
+   do template.
+2. Levante via skill decision-log, ANTES de implementar: (a) N/M exatos do teste JVM do
+   item 2; (b) mecanismo exato de teardown do e2e do item 1; (c) qualquer outra decisão
+   não-trivial identificada.
+3. Após spec aprovada e decisões registradas, implemente na ordem de prioridade acima —
+   item 1 primeiro, sempre.
+4. Rode `./mvnw clean verify` completo e a suíte e2e (incluindo as 10 execuções do item
+   1) antes de considerar a fase concluída.
+5. Rode code-reviewer e security-auditor sobre o diff final.
+6. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.

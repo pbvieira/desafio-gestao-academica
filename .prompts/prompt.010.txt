@@ -1,0 +1,91 @@
+Vamos iniciar a FASE 7 (renomeada da antiga Fase 8) do sistema de gestão de matrículas
+acadêmicas — a fase de finalização do desafio técnico. Decisão do Pablo (2026-07-12, ver
+docs/ROADMAP.md, nota "Fase 7 reimaginada"): em vez de só "completar o README", esta fase
+fecha as lacunas reais que faltam para a entrega ser avaliada com segurança, e prepara o
+material de entrevista de forma consolidada.
+
+NÃO adiciona funcionalidade nova. Pressupõe que a Fase 6 (unificada — testes + concorrência
+aprofundada) e a spec 010 (administração de usuários/papéis) já estão concluídas antes
+desta fase começar.
+
+ESCOPO DESTA FASE:
+
+1. Documento arquitetural curto (PRD §04 — deliverable distinto do README)
+   - O PRD pede explicitamente uma "documentação arquitetural curta explicando decisões,
+     trade-offs, riscos conhecidos, evolução da solução e tratamento de falhas na
+     mensageria" — isso NÃO existe hoje como arquivo próprio (só `docs/DECISIONS.md`, que
+     é a fonte granular de ~50 decisões, e o README, que é operacional/instruções).
+   - Crie `docs/ARQUITETURA.md`: um documento curto (não é para reescrever as decisões,
+     é para contar a história arquitetural em poucas páginas navegáveis, com link pontual
+     para entradas específicas de DECISIONS.md quando precisar de profundidade). Estrutura
+     sugerida:
+     - Visão geral do desenho (monólito modular Spring Modulith, contexto acadêmico vs.
+       secundário) e por quê (D001).
+     - As 3-5 decisões mais defensáveis/questionáveis do projeto, com o trade-off real
+       (ex: D001 monólito modular vs. microsserviços, D024 estratégia de concorrência com
+       números reais da Fase 6, D002 RabbitMQ vs. Kafka).
+     - Riscos conhecidos aceitos (ex: D035 rede do compose sem mTLS, qualquer outro achado
+       de security-auditor mantido deliberadamente).
+     - Caminho de evolução: como cada módulo se extrairia como serviço separado se
+       necessário (pergunta explícita do PRD/entrevista).
+     - Tratamento de falhas de mensageria (retry/DLQ/outbox — já implementado, resumir).
+
+2. Revisão final de consistência entre README/ROADMAP/DECISIONS/specs
+   - Mesmo tipo de auditoria já feita nesta sessão antes de reestruturar as Fases 6-7-8,
+     mas agora como checklist formal de fechamento, não reativa a um pedido pontual:
+     - Todo spec com Status desatualizado no cabeçalho (ex: "aprovada" quando já está
+       `concluída` de fato)?
+     - Toda entrada de docs/DECISIONS.md com índice/âncora/corpo consistentes (contagem
+       igual das três coisas — já verificado ser fácil de auditar com grep)?
+     - README reflete de fato a tela de administração de usuários (spec 010) e qualquer
+       coisa da Fase 6?
+     - ROADMAP.md com status real de cada fase (sem "Concluída" prematura)?
+
+3. Checklist literal do PRD, item por item, com evidência (não assumida)
+   - Percorra o PRD §06 (Critérios Críticos de Avaliação — itens eliminatórios) um por um
+     e escreva, para cada, ONDE está a evidência no repositório (arquivo/teste/seção do
+     README) de que o critério é atendido.
+   - Percorra o PRD §08 (Como a Entrega Será Analisada) e §05 (README Esperado) da mesma
+     forma — não vale "acho que está ok", tem que apontar o artefato.
+   - Se algum item não tiver evidência real, essa é a lacuna mais importante a fechar
+     antes de considerar o desafio pronto — não documente como "trade-off consciente" só
+     para não fazer o trabalho.
+
+4. Gate e2e completo
+   - `./mvnw clean verify` (backend completo) + toda a suíte `e2e/` (matrícula, mensageria,
+     administração de usuários/papéis, concorrência de 20 alunos — tudo que foi construído
+     até aqui) + frontend (`ng build`/`ng test`) numa mesma rodada final, sem nada quebrado.
+
+5. Revisão do "Uso de IA" no README
+   - O PRD pede especificamente: quais ferramentas, em quais partes, o que foi revisado
+     manualmente, quais trechos são mais críticos. Releia a seção atual do README — hoje
+     ela defere bastante detalhe para `docs/DECISIONS.md` (que classifica cada decisão por
+     origem: 🧑 Pablo / 🤝 IA revisada / 🤖 IA aceita sem alteração). Decida se isso é
+     suficiente ou se merece um resumo mais direto e específico direto no README (ex:
+     quantas decisões de cada origem, quais foram as mais contestadas pelo Pablo).
+
+6. "Pitch" de entrevista consolidado
+   - Não é conteúdo novo — é reunir num único lugar (seção de `docs/ARQUITETURA.md` ou do
+     README) um índice de "pergunta provável de entrevista → onde está a resposta pronta"
+     para as respostas que já foram escritas ao longo do projeto (ex: a resposta sobre
+     concorrência da Fase 6, o trade-off Modulith vs. microsserviços de D001, como a
+     mensageria trata falha do broker, D035/D036 e outros riscos aceitos). O objetivo é
+     não precisar procurar sob pressão numa sala de entrevista.
+
+FORA DO ESCOPO desta fase: qualquer funcionalidade nova; qualquer mudança de regra de
+negócio; retrabalho de decisões já fechadas (a menos que a checklist do item 3 revele uma
+lacuna real, não estética).
+
+SIGA O FLUXO DO CLAUDE.md:
+1. Confirme o próximo número de spec livre com `ls specs/`. Crie
+   `specs/0NN-finalizacao.md` a partir do template — o próprio checklist do item 3 acima
+   PODE ser a seção de critérios de aceite desta spec (é literalmente testável: cada linha
+   do PRD tem uma evidência apontada ou não).
+2. Não há decisão técnica nova de arquitetura aqui (é consolidação) — mas se a checklist do
+   item 3 revelar uma lacuna que exige escolha entre alternativas, trate como qualquer
+   outra decisão não-trivial (skill decision-log).
+3. Implemente na ordem: documento arquitetural (1) → consistência (2) → checklist PRD (3,
+   pode revelar retrabalho) → gate final (4) → uso de IA (5) → pitch de entrevista (6).
+4. Feche com o checklist de Definition of Done da spec.
+
+Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.
