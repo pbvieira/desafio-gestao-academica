@@ -63,6 +63,9 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D041 — Endpoint `GET /api/alunos/me` para o ALUNO descobrir o próprio `alunoId`](#d041)
 - [D042 — CORS restrito à origem do frontend](#d042)
 - [D043 — Sem abstração `CrudService<T>` genérica no frontend](#d043)
+- [D044 — Direção visual "Institucional acadêmico" para o redesign do frontend](#d044)
+- [D045 — Escopo e integração técnica da administração de usuários/papéis](#d045)
+- [D046 — Decisões menores agrupadas: módulo `administracao`, sidebar antecipando o slot, service account do `gestao-backend`](#d046)
 
 ---
 
@@ -1705,4 +1708,125 @@ revisitar se mais recursos CRUD forem adicionados no futuro.
 
 **Riscos conhecidos / o que revisitar se o contexto mudar:** Se o número de recursos CRUD crescer muito,
 reavaliar uma abstração genérica com mais tempo disponível.
+
+---
+
+<a id="d044"></a>
+## D044 — Direção visual "Institucional acadêmico" para o redesign do frontend
+
+**Data:** 2026-07-12
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/009-design-system-sidebar.md
+**Contexto:** O resultado visual do frontend entregue na spec 008 (identidade navy/laranja, tabelas
+densas) foi avaliado pelo próprio Pablo como pobre — sem hierarquia visual, ícones ou tratamento de
+estados vazio/loading. Era preciso escolher uma nova direção visual antes de qualquer código, usando o
+subagent `ui-designer` (recém-instalado) para conduzir a execução.
+
+**Alternativas consideradas** (apresentadas com mockup comparativo, mesma tela real de Turmas com sidebar):
+- **SaaS/ERP neutro** — paleta quase monocromática (cinza-azulado) com um único accent cobalto, tipografia
+  de sistema + monoespaçada para dados, ícones lineares finos. Mood "ferramenta de trabalho", mais próximo
+  de Linear/Notion. Era a recomendação inicial da IA.
+- **Institucional acadêmico** — sidebar em navy profundo, dourado restrito ao estado ativo/ênfase, títulos
+  em serifada clássica (Palatino/Georgia), fundo marfim. Mood de credibilidade institucional (diploma/
+  selo universitário), mais alinhado ao domínio real do sistema (gestão acadêmica).
+- **EdTech vibrante** — paleta mais colorida e cantos arredondados, mood de produto de consumo (descartada
+  já na fase de brainstorming, antes do mockup, por risco de incoerência com o tom ERP/institucional
+  esperado das telas de SECRETARIA/ADMIN).
+
+**Decisão (do Pablo, contrariando a recomendação inicial da IA):** Institucional acadêmico (navy + dourado
++ serifada), depois de ver os dois mockups lado a lado.
+
+**Justificativa (do Pablo):** A direção institucional comunica melhor o domínio real do produto (gestão
+acadêmica) do que a alternativa neutra de SaaS genérico — decisão tomada visualmente, comparando os dois
+mockups, não só pela descrição textual das opções.
+
+**Tokens resultantes:** `--navy:#16264A`, `--navy-2:#223768`, `--gold:#A9812F` (accent, restrito a
+estado ativo/ênfase — nunca reutilizado para semântica de erro/aviso), `--bg:#FAFAF7`, `--ink:#1C2230`,
+`--muted:#6B6456`, mais os semânticos `--ok`/`--warn`/`--danger` (deliberadamente distintos do dourado,
+para não sobrecarregar o accent com significado de erro/aviso — refinamento sobre o mockup inicial, que
+reaproveitava o dourado como cor de aviso). Serifada (`"Iowan Old Style", "Palatino Linotype", Palatino,
+Georgia, "Times New Roman", serif`) só em títulos de página/seção e na marca — cabeçalho de tabela
+continua em sans maiúsculo, não itálico serifado como no mockup, por legibilidade em alta densidade de
+dados.
+
+**Trade-offs aceitos:** Reabre uma decisão de escopo já registrada na spec 008 ("polimento visual fora de
+escopo por prazo") — investimento de tempo extra que a spec original não previa.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Nenhum identificado — decisão de
+apresentação, reversível se uma direção diferente for preferida mais tarde (os tokens estão concentrados
+em `styles.css`, não espalhados pelo código).
+
+---
+
+<a id="d045"></a>
+## D045 — Escopo e integração técnica da administração de usuários/papéis
+
+**Data:** 2026-07-12
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/010-administracao-usuarios-papeis.md
+**Contexto:** O Pablo pediu uma tela para ADMIN gerenciar usuários e permissões. Era preciso fechar, antes
+de implementar: até onde essa tela vai (só papel, ou também ciclo de vida do usuário), como o backend fala
+com o Keycloak, e quem pode acessá-la — três decisões tomadas juntas na mesma rodada de brainstorming,
+por estarem diretamente interligadas (o escopo determina a superfície de integração necessária).
+
+**Alternativas consideradas:**
+- *Escopo:* (a) só reatribuir papel de usuários existentes; (b) (a) + habilitar/desabilitar usuário; (c)
+  CRUD completo (+ criar usuário, resetar senha) — escopo (c) se aproxima de reimplementar uma fração do
+  próprio console admin do Keycloak dentro da aplicação.
+- *Integração com Keycloak:* (a) `keycloak-admin-client` (SDK oficial Java, métodos tipados); (b) chamadas
+  REST manuais (`RestClient` do Spring, parsing manual de JSON, sem dependência nova); (c) frontend
+  chamando a Admin API do Keycloak diretamente — descartada de saída por exigir um token com privilégio
+  administrativo do Keycloak no browser, superfície de risco desproporcional ao ganho.
+- *Acesso:* (a) só ADMIN; (b) SECRETARIA e ADMIN (mantém a equivalência atual dos dois papéis, D011).
+
+**Decisão:** Escopo (a) só reatribuir papel; integração (a) `keycloak-admin-client`; acesso (a) só ADMIN.
+
+**Justificativa (do Pablo):** Escopo mínimo que já entrega valor real (gerenciar quem tem qual papel) sem
+reconstruir o console do Keycloak. `keycloak-admin-client` troca uma dependência nova por bem menos código
+de integração/parsing manual, reduzindo risco de erro numa superfície sensível (concessão de privilégio).
+Restringir a ADMIN é a primeira regra real que diferencia esse papel de SECRETARIA no backend — fecha o
+ponto que D011 já deixava aberto ("revisitar se surgir uma regra real que os diferencie").
+
+**Trade-offs aceitos:** Mais uma dependência Maven (`keycloak-admin-client`); escopo deliberadamente menor
+do que "gestão completa de usuários" — criar usuário/resetar senha continuam exigindo o console admin do
+Keycloak diretamente.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se surgir necessidade real de criar usuários
+pela própria aplicação (não só reatribuir papel), revisitar o escopo (b)/(c) acima.
+
+---
+
+<a id="d046"></a>
+## D046 — Decisões menores agrupadas: módulo `administracao`, sidebar antecipando o slot, service account do `gestao-backend`
+
+**Data:** 2026-07-12
+**Origem:** 🤖 Default da IA, apresentado e não contestado durante o planejamento (grupado por baixo risco,
+mesmo padrão de D022/D030/D035)
+**Spec relacionada:** specs/009-design-system-sidebar.md, specs/010-administracao-usuarios-papeis.md
+**Contexto:** Conjunto de decisões técnicas menores identificadas ao planejar as specs 009/010, agrupadas
+para não inflar o log:
+
+- **Novo módulo Modulith `administracao`** (em vez de colocar o controller/service de gestão de
+  usuários dentro de `security`) — mantém `security` focado em configuração transversal de
+  autenticação/autorização (`SecurityConfig`, `PermissionEvaluator`), em vez de acumular também a lógica
+  de negócio de gestão de usuários do Keycloak, que é um contexto de aplicação distinto.
+- **Sidebar (spec 009) já cria a seção "Administração"** antes da tela em si existir (spec 010) — a seção
+  só fica visível para ADMIN e pode ficar vazia/apontar para uma rota ainda inexistente entre a conclusão
+  da spec 009 e da spec 010, dependendo da ordem de implementação escolhida na execução.
+- **`serviceAccountsEnabled: true` no client `gestao-backend`**, com client roles `view-users`/
+  `manage-users`/`query-users` de `realm-management` atribuídas ao seu service account — requisito técnico
+  da integração via `client_credentials` (D045), não uma escolha entre alternativas: sem isso, a chamada à
+  Admin API do Keycloak nunca autentica. Mesmo padrão de "requisito técnico sem alternativa razoável" já
+  usado em D042 (CORS).
+
+**Decisão:** Conforme detalhado acima.
+
+**Justificativa:** Escolhas de baixo risco, consequência direta da decisão principal já tomada em D045 ou
+de padrões já estabelecidos no projeto (separação de módulo por contexto, D001/D005).
+
+**Trade-offs aceitos:** Nenhum identificado além do já mencionado.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se a sidebar da spec 009 for implementada
+antes da spec 010, decidir na execução se a seção "Administração" fica oculta até a rota existir ou
+aparece com um placeholder — detalhe de sequenciamento, não uma decisão de arquitetura.
 

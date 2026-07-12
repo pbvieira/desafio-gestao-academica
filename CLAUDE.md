@@ -97,6 +97,7 @@ Instalados em `.claude/agents/` (escopo de projeto, versionados no git). Fonte: 
 | `java-architect` | Decisões estruturais de pacote/módulo Java, padrões de design, revisão de arquitetura Spring Modulith |
 | `spring-boot-engineer` | Implementação de controllers, services, configuração Spring Boot, integração JPA/Flyway |
 | `angular-architect` | Estrutura do frontend, componentes, roteamento, consumo de API |
+| `ui-designer` | Design visual/sistema de design do frontend — layout, hierarquia, componentes, acessibilidade (não arquitetura/estado, isso é `angular-architect`) |
 | `qa-expert` | Estratégia de testes, cenários de teste para regras de negócio críticas |
 | `test-automator` | Escrita de testes automatizados (unit/integration/e2e), configuração de Testcontainers |
 | `code-reviewer` | Etapa 7 do fluxo — revisão funcional/qualidade de todo diff antes de fechar tarefa |
