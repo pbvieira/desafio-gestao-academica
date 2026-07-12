@@ -71,6 +71,29 @@ já rascunhado para elas antes desta inserção, ex: um rascunho em `.prompts/` 
 para `009`/`010`, que já existem e estão fechados. Ao dar continuidade às Fases 6/7/8, confirme o próximo
 número livre com `ls specs/` antes de criar o arquivo.
 
+**Achado crítico no rascunho da Fase 7 (2026-07-12), antes de executar:** o rascunho em
+`.prompts/prompt.010.txt` descreve o cenário de prova real como "20 alunos tentando se matricular
+simultaneamente, 1 sucesso, 19 recebem 409 de vaga" e planeja isolar Direct Access Grant num
+client/realm de teste separado para autenticar os 20 alunos. Duas premissas verificadas no código atual
+(`MatriculaService.java`, `PerfilPermissionEvaluator.java`) mostram que isso não corresponde à
+implementação real:
+1. `criar()` (matricular-se) nunca verifica vaga — só `confirmar()` faz o `UPDATE` condicional de D024, e
+   `confirmar()` é restrito a SECRETARIA/ADMIN (D027). A disputa pela vaga acontece na confirmação, não na
+   matrícula em si — "20 alunos se matriculando" nunca geraria um 409 de vaga.
+2. `permitirAluno()` libera `MATRICULAR` para qualquer staff (`isStaff(authentication) -> true`) —
+   ou seja, um único usuário SECRETARIA/ADMIN já existente pode criar as 20 matrículas PENDENTES em nome
+   de 20 Alunos distintos (staff-only, sem precisar de login desses alunos) e depois disparar as 20
+   confirmações concorrentes ele mesmo. Não são necessários 20 usuários Keycloak novos, nem isolar
+   Direct Access Grant em um client/realm de teste — esse grant já está habilitado no client de produção
+   `gestao-frontend` (D036, achado do security-auditor da spec 008, risco já aceito), reaproveitado pelo
+   `secretaria.teste` já existente.
+   Também: item 1 do rascunho lista "UPDATE atômico condicional" como uma das *duas estratégias novas* a
+   implementar para comparação — mas essa estratégia já é a implementação real em produção desde a spec
+   006 (D024/D025, confirmado em `TurmaRepository.java`). Só o lock pessimista é, de fato, uma
+   implementação nova para a Fase 7.
+   Reflita essas duas correções na spec da Fase 7 antes de implementar o cenário e2e/a comparação de
+   estratégias.
+
 **Risco de defasagem da Fase 8 (2026-07-12):** a Fase 8 foi marcada "Concluída" com base no estado do
 README após a Fase 5b (spec 009) — mas a spec 010 (Fase 5c), quando implementada, vai adicionar uma tela
 nova (administração de usuários/papéis) e uma mudança de configuração do Keycloak
