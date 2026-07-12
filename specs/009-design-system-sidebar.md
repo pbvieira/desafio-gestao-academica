@@ -1,6 +1,6 @@
 # 009 — Sistema de design e sidebar (redesign visual do frontend)
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §03 (frontend Angular consumindo a API), §07 (organização, fluxo de uso
 e tratamento de erros — critério de pontuação explícito do frontend, não estética)
 **Módulo(s) Modulith afetado(s):** N/A — só `frontend/`, fora do Modulith Java
@@ -125,10 +125,11 @@ isso o teste mais valioso é a validação manual por papel, não um teste autom
 - [x] Cobertura ≥ 80% no módulo afetado — N/A nesta tarefa (sem lógica nova); build/lint verde é o gate
   real
 - [x] `docs/DECISIONS.md` atualizado com D044 e D046
-- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados (pendente — revisão
-  final de branch, ver seção 10)
-- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados (pendente — ver
-  seção 10)
+- [x] `code-reviewer` executado — achados endereçados: deriva documental na spec §2/§5 e no título de D046
+  (commit `22672e9`); nenhum achado de código
+- [x] `security-auditor` executado — nenhum achado bloqueante/alto/médio; confirmou com evidência
+  independente (SecurityConfig, `@PreAuthorize` nos controllers, `role.guard.ts`) que a visibilidade da
+  sidebar é só UX e a autorização real permanece 100% no backend
 - [x] Esta spec atualizada para refletir o que foi de fato implementado
 - [x] `./mvnw clean verify` passando (não afetado por esta tarefa — 136/136 testes, `BUILD SUCCESS`,
   confirmado na validação)
