@@ -53,6 +53,13 @@ Regra de ouro: se existe mais de uma alternativa razoável (ex: lock otimista vs
 - Escreva o teste (ou pelo menos o esqueleto dele) antes ou junto da implementação, não depois.
 - Siga a camada convencional definida em "Arquitetura-alvo" abaixo.
 - Não deixe entidades JPA vazarem pela API — sempre DTOs na borda.
+- **Execução do plano de implementação: `subagent-driven-development` é a abordagem padrão** (decisão do
+  Pablo, 2026-07-12) — depois que `writing-plans` gerar o plano em
+  `docs/superpowers/plans/`, execute-o via skill `subagent-driven-development` (subagent fresco por task
+  + revisão de task + revisão final de branch), não via execução inline na mesma sessão. `executing-plans`
+  fica só para o cenário específico em que a skill foi desenhada (sessão paralela/worktree separado), não
+  como alternativa de mesmo peso — não pergunte "qual abordagem?" a cada novo plano; assuma
+  subagent-driven a menos que o usuário diga o contrário.
 
 ### 5. Testes unitários e de integração — cobertura ≥ 80% com sentido
 
@@ -114,7 +121,8 @@ Instaladas em `.claude/skills/` (escopo de projeto). Fonte: [obra/superpowers](h
 |---|---|
 | `brainstorming` | Etapa 1 — explorar alternativas antes de fechar o plano |
 | `writing-plans` | Etapa 1/2 — transformar o plano em spec estruturada |
-| `executing-plans` | Etapa 4 — seguir a spec de forma disciplinada durante a implementação |
+| `subagent-driven-development` | Etapa 4 — **abordagem padrão** de execução do plano: subagent fresco por task + revisão por task + revisão final de branch (ver nota na etapa 4) |
+| `executing-plans` | Etapa 4 (alternativa) — só para sessão paralela/worktree separado; não é o padrão deste projeto |
 | `test-driven-development` | Etapa 4/5 — disciplina de escrever teste antes/junto do código |
 | `requesting-code-review` / `receiving-code-review` | Etapa 7 — protocolo de como pedir e responder a revisões |
 | `verification-before-completion` | Etapa 9 — checklist final antes de considerar a tarefa pronta |
