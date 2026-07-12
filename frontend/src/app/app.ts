@@ -15,6 +15,18 @@ export class App {
   protected readonly errorBanner = inject(ErrorBannerService);
   private readonly keycloak = inject(Keycloak);
 
+  protected get iniciais(): string {
+    const nome = this.currentUser.nome || this.currentUser.username;
+    const partes = nome.trim().split(/\s+/).filter(Boolean);
+    if (partes.length === 0) {
+      return '?';
+    }
+    if (partes.length === 1) {
+      return partes[0].slice(0, 2).toUpperCase();
+    }
+    return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+  }
+
   logout(): void {
     this.keycloak.logout({ redirectUri: window.location.origin });
   }

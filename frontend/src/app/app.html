@@ -1,30 +1,72 @@
-<header class="app-header">
-  <div class="app-header-brand">Gestão de Matrículas</div>
-  <nav class="app-nav">
-    <a routerLink="/turmas" routerLinkActive="active">Turmas</a>
-    @if (currentUser.temPapel('ALUNO')) {
-      <a routerLink="/minhas-matriculas" routerLinkActive="active">Minhas matrículas</a>
-      <a routerLink="/meu-perfil" routerLinkActive="active">Meu perfil</a>
-    }
-    @if (currentUser.ehSecretariaOuAdmin) {
-      <a routerLink="/cursos" routerLinkActive="active">Cursos</a>
-      <a routerLink="/disciplinas" routerLinkActive="active">Disciplinas</a>
-      <a routerLink="/alunos" routerLinkActive="active">Alunos</a>
-    }
-  </nav>
-  <div class="app-header-user">
-    <span>{{ currentUser.nome || currentUser.username }}</span>
-    <button (click)="logout()">Sair</button>
-  </div>
-</header>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6l7-3z"/></svg>
+      </span>
+      <span class="brand-name">Gestão Acadêmica</span>
+    </div>
 
-@if (errorBanner.mensagem(); as mensagem) {
-  <div class="banner banner-error app-global-banner">
-    {{ mensagem }}
-    <button (click)="errorBanner.clear()">×</button>
-  </div>
-}
+    <nav>
+      @if (currentUser.ehSecretariaOuAdmin) {
+        <div class="nav-section">
+          <div class="nav-label">Acadêmico</div>
+          <a class="nav-item" routerLink="/turmas" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="12" height="4" rx="1"/></svg>
+            <span>Turmas</span>
+          </a>
+          <a class="nav-item" routerLink="/cursos" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6 L4 4 V18 L12 20 L20 18 V4 Z"/><line x1="12" y1="6" x2="12" y2="20"/></svg>
+            <span>Cursos</span>
+          </a>
+          <a class="nav-item" routerLink="/disciplinas" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4V3z"/></svg>
+            <span>Disciplinas</span>
+          </a>
+          <a class="nav-item" routerLink="/alunos" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M2 19c0-3 2.7-5 6-5s6 2 6 5"/><path d="M10 19c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5"/></svg>
+            <span>Alunos</span>
+          </a>
+        </div>
+      }
+      @if (currentUser.temPapel('ALUNO')) {
+        <div class="nav-section">
+          <div class="nav-label">Minha conta</div>
+          <a class="nav-item" routerLink="/turmas" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="12" height="4" rx="1"/></svg>
+            <span>Turmas</span>
+          </a>
+          <a class="nav-item" routerLink="/minhas-matriculas" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+            <span>Minhas matrículas</span>
+          </a>
+          <a class="nav-item" routerLink="/meu-perfil" routerLinkActive="active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6"/></svg>
+            <span>Meu perfil</span>
+          </a>
+        </div>
+      }
+    </nav>
 
-<main class="app-content">
-  <router-outlet />
-</main>
+    <div class="nav-user">
+      <span class="avatar">{{ iniciais }}</span>
+      <span class="who">
+        <span class="name">{{ currentUser.nome || currentUser.username }}</span>
+        <span class="role">{{ currentUser.papeis.join(' · ') }}</span>
+      </span>
+      <button (click)="logout()" title="Sair" aria-label="Sair">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a1 1 0 00-1 1v14a1 1 0 001 1h4"/><path d="M16 17l4-5-4-5"/><line x1="20" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <div class="content">
+    @if (errorBanner.mensagem(); as mensagem) {
+      <div class="banner banner-error">
+        {{ mensagem }}
+        <button (click)="errorBanner.clear()">×</button>
+      </div>
+    }
+    <router-outlet />
+  </div>
+</div>
