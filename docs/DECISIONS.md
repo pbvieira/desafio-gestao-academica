@@ -1813,6 +1813,13 @@ para não inflar o log:
 - **Sidebar (spec 009) já cria a seção "Administração"** antes da tela em si existir (spec 010) — a seção
   só fica visível para ADMIN e pode ficar vazia/apontar para uma rota ainda inexistente entre a conclusão
   da spec 009 e da spec 010, dependendo da ordem de implementação escolhida na execução.
+
+  **Refinamento durante a execução do plano da spec 009 (2026-07-12):** decisão revertida — a seção
+  "Administração" **não** foi criada na Task 2 do plano (`docs/superpowers/plans/2026-07-12-design-system-sidebar.md`).
+  Um `nav-item`/`nav-section` sem rota real por trás (link morto) foi avaliado como pior do que simplesmente
+  adiar a seção inteira; a spec 010 agora cria a seção e o item juntos, como uma unidade, em vez de a
+  spec 009 antecipar um slot vazio. Achado pelo `task-reviewer` durante a revisão da Task 2 (divergência
+  entre o plano e esta entrada/spec 009 §6), confirmado pelo Pablo.
 - **`serviceAccountsEnabled: true` no client `gestao-backend`**, com client roles `view-users`/
   `manage-users`/`query-users` de `realm-management` atribuídas ao seu service account — requisito técnico
   da integração via `client_credentials` (D045), não uma escolha entre alternativas: sem isso, a chamada à

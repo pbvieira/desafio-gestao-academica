@@ -89,9 +89,10 @@ não são decisão do subagent.
   visual quebrada (overflow, contraste ilegível, texto sobreposto).
 - [ ] Sidebar substitui o header horizontal; os mesmos itens de navegação de hoje continuam acessíveis,
   agrupados nas 3 seções, cada um condicionado ao mesmo papel de antes.
-- [ ] Seção "Administração" aparece na sidebar só para ADMIN (mesmo sem nenhum item funcional dentro
-  dela ainda — o link para a spec 010 pode ficar como placeholder/rota ainda inexistente até lá, ou a
-  seção só aparece quando a spec 010 for implementada — decisão de sequenciamento na execução).
+- [x] ~~Seção "Administração" aparece na sidebar só para ADMIN (mesmo sem nenhum item funcional dentro
+  dela ainda...)~~ — **revertido durante a execução (D046, refinamento 2026-07-12):** a seção não é criada
+  nesta spec, para não deixar um item de navegação sem rota real por trás; a spec 010 cria a seção e o
+  item juntos, como uma unidade.
 - [ ] `.badge`/status pill, `.banner`, `.loading`, estado vazio de tabela seguem o novo estilo em pelo
   menos Turma, Aluno e Matrícula (telas com mais uso desses padrões).
 - [ ] Nenhum teste unitário de service quebra (esta tarefa não toca lógica, só template/CSS).
