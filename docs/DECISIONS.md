@@ -66,6 +66,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D044 — Direção visual "Institucional acadêmico" para o redesign do frontend](#d044)
 - [D045 — Escopo e integração técnica da administração de usuários/papéis](#d045)
 - [D046 — Decisões menores agrupadas: módulo `administracao`, seção Administração da sidebar adiada, service account do `gestao-backend`](#d046)
+- [D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)](#d047)
 
 ---
 
@@ -1859,4 +1860,51 @@ de padrões já estabelecidos no projeto (separação de módulo por contexto, D
 **Riscos conhecidos / o que revisitar se o contexto mudar:** Se a sidebar da spec 009 for implementada
 antes da spec 010, decidir na execução se a seção "Administração" fica oculta até a rota existir ou
 aparece com um placeholder — detalhe de sequenciamento, não uma decisão de arquitetura.
+
+## D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)
+
+**Data:** 2026-07-13
+**Origem:** Mista — ver cada ponto abaixo
+**Spec relacionada:** specs/011-tema-keycloakify-login.md
+**Contexto:** Ao planejar a spec 011 (tema Keycloakify aplicando a identidade "Institucional acadêmico" da
+spec 009 ao login do Keycloak), quatro decisões técnicas não-triviais surgiram. Apresentadas ao Pablo via
+perguntas de múltipla escolha antes de escrever a spec:
+
+- **Escopo de páginas do tema — somente login.** Alternativas: somente login vs. login+account console vs.
+  reskin completo (login+account+email+admin). Escolhido somente login porque é a única superfície do
+  Keycloak que o usuário final efetivamente vê hoje — registro está desabilitado no realm
+  (`registrationAllowed: false`) e "Meu Perfil" já é resolvido dentro do Angular, não pelo account console
+  do Keycloak. 🤖 **Default da IA, aceito sem alteração** (Pablo escolheu exatamente a opção apresentada
+  como mais coerente com o que já existe, sem contestar).
+- **Estratégia de entrega do tema ao container — JAR provider via volume.** Alternativas: diretório de
+  tema sem JAR montado direto em `/opt/keycloak/themes` vs. JAR provider montado em
+  `/opt/keycloak/providers` vs. imagem Docker customizada que builda e empacota o tema. 🤝 **Sugestão da
+  IA, revisada por Pablo** — a proposta inicial (menor atrito) era o diretório sem JAR; Pablo optou pelo
+  JAR provider em vez disso.
+- **Local do projeto no repositório — `keycloak-theme/` na raiz.** Alternativas: novo diretório na raiz vs.
+  dentro de `frontend/`. Escolhido a raiz porque o Keycloakify exige toolchain React+Vite própria,
+  incompatível com o workspace Angular CLI de `frontend/`. 🤖 **Default da IA, aceito sem alteração.**
+- **Estratégia de reskin — CSS/tokens sobre o `Template` default do Keycloakify**, sem `eject` de páginas
+  individuais em React customizado. Decisão levantada e justificada pela IA (não colocada em pergunta
+  separada ao Pablo, por ser de baixo risco e reversível) e aceita sem alteração ao validar o design da
+  spec 011. 🤖 **Default da IA, aceito sem alteração.**
+
+**Decisão:** Conforme detalhado em cada ponto acima.
+
+**Justificativa:** Escopo mínimo (só login) evita reskin de superfícies do Keycloak que a aplicação não
+usa; JAR provider via volume (decisão do Pablo) mantém o padrão de infra-as-código do projeto sem exigir
+imagem Docker customizada; localização em `keycloak-theme/` evita misturar dois toolchains de frontend no
+mesmo diretório; reskin via CSS/tokens sobre o `Template` padrão é suficiente para o objetivo (identidade
+visual) sem assumir a manutenção de páginas de autenticação customizadas que o PRD não pede.
+
+**Trade-offs aceitos:** JAR provider via volume exige rebuild do tema (`npm run build-keycloak-theme`)
+antes de cada `docker compose up` que dependa de uma mudança nova no tema — não há watch/hot-reload contra
+o Keycloak real (o `npm run dev` do Keycloakify cobre isso via mock local, mas é um ciclo de verificação
+separado do compose). Reskin via `Template` default (em vez de páginas ejetadas) limita customizações mais
+profundas de layout por página, caso surjam no futuro.
+
+**Riscos conhecidos / o que revisitar se o contexto mudar:** Se o projeto precisar futuramente de tema para
+account console ou e-mail, essa é uma extensão natural do mesmo `keycloak-theme/`, não uma nova decisão de
+localização. Se o fluxo de build/volume se mostrar frágil (ex: nome de artefato mudando entre versões do
+Keycloakify), reconsiderar imagem Docker customizada como abordagem mais determinística.
 
