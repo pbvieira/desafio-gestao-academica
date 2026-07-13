@@ -108,7 +108,7 @@ de `matricula.vaga.conflito` por `motivo`.
 | 2 | Mecanismo de teardown do e2e (dado que teardown completo de curso/disciplina é impossível hoje) | reaproveitar curso/disciplina fixos vs. deixar acumular sem limpeza vs. adicionar hard-delete em produção | [D050](../docs/DECISIONS.md#d050) — curso/disciplina fixos reaproveitados; turma+alunos sempre soft-deletados |
 | 3 | Onde vive o código de comparação com lock pessimista | só em `src/test/java` vs. repository method em produção + serviço de comparação em teste | [D051](../docs/DECISIONS.md#d051) — tudo em `src/test/java`, nada em produção |
 | 4 | Nome/granularidade da métrica Micrometer nova | contador simples sem tags vs. com tag `motivo` | [D052](../docs/DECISIONS.md#d052) — com tag `motivo` |
-| 5 | Decisão final: manter estratégia atômica ou trocar para lock pessimista | a decidir com os números reais das Tasks 2/3 | pendente — registrada em entrada própria de `docs/DECISIONS.md` ao final da Task 4 |
+| 5 | Decisão final: manter estratégia atômica ou trocar para lock pessimista | atômica (D024) vs. pessimista (`PESSIMISTIC_WRITE`) — números reais: ambas 1 sucesso/9 conflitos/0 exceções em N=10/M=1, tempos estatisticamente indistinguíveis (32ms vs 33ms) | [D053](../docs/DECISIONS.md#d053) — mantém a estratégia atômica (D024) |
 
 ## 6. Critérios de aceite
 
@@ -164,8 +164,7 @@ reais, não em preferência teórica, que é o que o teste de comparação entre
 - [ ] Critérios de aceite (seção 6) atendidos
 - [ ] Testes da seção 7 implementados e passando
 - [ ] Cobertura ≥ 80% no(s) módulo(s) afetado(s), com sentido (ver CLAUDE.md item 5)
-- [ ] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D049-D052 já registradas; decisão
-  final da Task 4 pendente até os números reais existirem)
+- [ ] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D049-D053 registradas)
 - [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados
 - [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados
 - [ ] Esta spec atualizada para refletir o que foi de fato implementado

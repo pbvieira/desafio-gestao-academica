@@ -72,6 +72,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D050 — Teardown do e2e de concorrência: curso/disciplina fixos reaproveitados (teardown completo é impossível hoje)](#d050)
 - [D051 — Código de comparação com lock pessimista isolado em `src/test/java`, nunca em produção](#d051)
 - [D052 — Métrica `matricula.vaga.conflito` com tag `motivo`, primeira métrica com tag do projeto](#d052)
+- [D053 — Decisão final: mantém UPDATE atômico condicional (D024), lock pessimista não substitui](#d053)
 
 ---
 
@@ -2124,4 +2125,45 @@ projeto; cardinalidade da tag é baixa e fixa (2 valores possíveis), sem risco 
 Prometheus.
 **Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado — cardinalidade fixa e
 baixa, sem risco de crescimento não controlado.
+
+## D053 — Decisão final: mantém UPDATE atômico condicional (D024), lock pessimista não substitui
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/012-concorrencia-e-testes.md
+**Contexto:** Com a prova e2e real (Task 2) e a comparação numérica JVM (Task 3) concluídas, faltava
+confirmar se a estratégia atômica já em produção desde a spec 006 (D024, `UPDATE` condicional em
+`TurmaRepository.consumirVaga`) devia ser mantida ou substituída pela variante de lock pessimista
+implementada só para comparação (D051). Números reais coletados:
+- **Task 2 (e2e, HTTP real, Keycloak real):** 20 alunos disputando a última vaga de 1 turma, 20
+  confirmações verdadeiramente simultâneas (`Promise.all`), repetido 10x consecutivas duas vezes (20/20
+  execuções totais) — em todas, exatamente 1×200 e 19×409/`VAGAS_ESGOTADAS`, sem exceção não tratada, sem
+  timeout, sem resultado ambíguo. Teardown verificado (turma/alunos soft-deletados, curso/disciplina fixos
+  preservados, D050).
+- **Task 3 (JVM, N=10 threads/M=1 vaga, uma execução por estratégia):** estratégia atômica —
+  `sucessos=1, conflitos=9, excecoesInesperadas=0, tempoTotalMs=32`; estratégia pessimista (`PESSIMISTIC_WRITE`,
+  código isolado em `src/test/java`, D051) — `sucessos=1, conflitos=9, excecoesInesperadas=0, tempoTotalMs=33`.
+  Corretude idêntica; diferença de tempo (32ms vs. 33ms) estatisticamente insignificante nessa escala e
+  execução única — não é um sinal de performance confiável, apenas ruído de medição.
+**Alternativas consideradas:**
+- Manter a estratégia atômica condicional (D024) — já validada em produção desde a spec 006, sem nenhuma
+  vantagem de performance demonstrada pela alternativa nessa escala, e evita manter um lock de linha aberto
+  pela duração de uma transação (menor risco de cadeia de espera sob carga maior que a testada aqui).
+- Trocar para lock pessimista (`PESSIMISTIC_WRITE`) — corretude equivalente nos números coletados, mas
+  exigiria migrar `MatriculaService.confirmar()` de estratégia (mudança de escopo maior, fora do que esta
+  fase cobre) sem nenhum ganho mensurado que justificasse o custo/risco da migração.
+**Decisão:** manter a estratégia atômica condicional (D024). Nenhuma mudança em `src/main/java` — a
+comparação não altera o caminho de produção.
+**Justificativa (Pablo, ao ser perguntado):** confirmou a recomendação apresentada com os números reais em
+mãos — a pessimista não mostrou vantagem de performance na comparação, e a atômica evita o risco adicional
+de um lock de linha aberto por mais tempo sob carga maior que a testada.
+**Trade-offs aceitos:** o harness de lock pessimista (`TurmaLockPessimistaRepository`,
+`ConfirmacaoPessimistaService`, `LockPessimistaVsAtomicoComparativoIntegrationTest`, todos em
+`src/test/java/br/com/desafio/tecnico/gestao/academico/concorrencia/`) permanece no repositório como
+benchmark permanente, não como código morto a remover — nunca existiu no caminho de produção (D051), então
+não há nada a excluir. Nenhum trade-off novo introduzido em produção.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** já registrado em D024 — "se a carga real de
+matrícula concorrente crescer para uma escala de 'flash sale' (milhares de req/s pela mesma turma),
+revisitar com reserva via Redis + fila". Esta comparação (N=10/20 alunos) não altera esse risco nem o
+resolve — só confirma que, na escala testada, a estratégia atual continua sendo a escolha correta.
 
