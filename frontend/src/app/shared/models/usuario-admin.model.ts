@@ -7,7 +7,3 @@ export interface UsuarioAdminResponse {
   email: string;
   papel: Papel | null;
 }
-
-export interface ReatribuirPapelRequest {
-  papel: Papel;
-}
