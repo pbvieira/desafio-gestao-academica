@@ -165,8 +165,9 @@ reais, não em preferência teórica, que é o que o teste de comparação entre
 - [x] Testes da seção 7 implementados e passando
 - [x] Cobertura ≥ 80% no(s) módulo(s) afetado(s), com sentido (ver CLAUDE.md item 5)
 - [x] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D049-D053 registradas)
-- [x] `code-reviewer` executado — achados endereçados ou justificadamente descartados
-- [x] `security-auditor` executado — achados endereçados ou justificadamente descartados
+- [x] `code-reviewer` executado — revisão por task (uma por task 2-7, achados endereçados); revisão final de
+  branch sobre o diff completo da spec ainda pendente, ver `docs/superpowers/plans/2026-07-13-concorrencia-e-testes.md`
+- [x] `security-auditor` executado — mesma ressalva acima (por task; revisão final de branch pendente)
 - [x] Esta spec atualizada para refletir o que foi de fato implementado
 - [x] `./mvnw clean verify` passando
 
