@@ -68,6 +68,10 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D046 — Decisões menores agrupadas: módulo `administracao`, seção Administração da sidebar adiada, service account do `gestao-backend`](#d046)
 - [D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)](#d047)
 - [D048 — `AdministracaoUsuarioService.listarUsuarios()` resolve papel via membros de role (O(3)), não N+1 por usuário](#d048)
+- [D049 — Ferramental da prova e2e de concorrência: Playwright isolado em `e2e/playwright/`, repetição via `--repeat-each`](#d049)
+- [D050 — Teardown do e2e de concorrência: curso/disciplina fixos reaproveitados (teardown completo é impossível hoje)](#d050)
+- [D051 — Código de comparação com lock pessimista isolado em `src/test/java`, nunca em produção](#d051)
+- [D052 — Métrica `matricula.vaga.conflito` com tag `motivo`, primeira métrica com tag do projeto](#d052)
 
 ---
 
@@ -1982,4 +1986,142 @@ se `add()` falhar após `remove()` ter tido sucesso (ex: falha de rede intermite
 chamadas), o usuário-alvo fica temporariamente sem nenhum papel gerenciado. Aceito como está, dado o
 baixo tráfego da tela (uso administrativo pontual, não um fluxo de usuário final) — documentado aqui para
 não ser redescoberto como "bug" depois; não há retry automático nem compensação implementados.
+
+## D049 — Ferramental da prova e2e de concorrência: Playwright isolado em `e2e/playwright/`, repetição via `--repeat-each`
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/012-concorrencia-e-testes.md
+**Contexto:** A prova mais crítica desta fase é a disputa real por uma vaga entre 20 alunos, disparando 20
+confirmações verdadeiramente simultâneas contra a API real. Todo o `e2e/` existente até aqui é bash + curl +
+python3 — funciona bem para fluxos sequenciais, mas orquestrar 20 chamadas HTTP genuinamente simultâneas
+(sem uma delas começar antes da anterior terminar de disparar) é desconfortável em bash puro; `Promise.all`
+em Node é o jeito direto de garantir isso. Já entrei nesta fase com a decisão de usar Playwright
+`APIRequestContext` (cliente HTTP puro do Playwright, sem simular clique de UI) já tomada — a pergunta que
+restava era onde/como esse projeto Node vive no repo, dado que não existe `package.json` na raiz nem em
+`e2e/` hoje.
+**Alternativas consideradas:**
+- Projeto Playwright dentro de `frontend/`, reaproveitando o `package.json` Angular já existente — evita
+  criar mais um projeto Node, mas mistura uma dependência de teste e2e de API com o projeto de UI, fugindo
+  do padrão de isolamento por responsabilidade que o repo já usa (`frontend/` e `keycloak-theme/` são cada
+  um seu próprio projeto Node, sem dependências cruzadas).
+- `e2e/playwright/` como projeto Node isolado, só `@playwright/test` como devDependency, sem instalar
+  browsers (o `APIRequestContext` não precisa de Chromium/Firefox/WebKit — só `playwright-core`, não a
+  instalação completa do pacote `playwright`) — consistente com o padrão já estabelecido de "um toolchain
+  por responsabilidade".
+- Repetição das 10 execuções: loop bash externo chamando `npx playwright test` 10x, vs. `--repeat-each=10`
+  nativo do Playwright.
+**Decisão:** `e2e/playwright/` isolado, sem download de browser; repetição via `--repeat-each=10` nativo do
+Playwright, `workers: 1` (as 10 repetições rodam em série; a concorrência real de 20 já acontece dentro de
+cada repetição, via `Promise.all`).
+**Justificativa:** confirmei ambas as recomendações apresentadas sem alteração — o isolamento por projeto já
+é o padrão do repo (nenhum motivo para quebrá-lo aqui) e `--repeat-each` dá granularidade nativa por
+repetição no relatório (`(repeat:N/10)`), o que facilita apontar exatamente qual das 10 execuções falhou, se
+alguma falhar, sem reinventar isso em bash.
+**Trade-offs aceitos:** primeiro uso de Playwright no repo — zero precedente local para convenções de
+`.gitignore`/estrutura de projeto Node com esse framework especificamente (ainda que o padrão geral de
+projeto Node isolado já exista via `frontend/`/`keycloak-theme/`); mais uma stack de teste a manter, além
+dos scripts bash já existentes.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** o comportamento de "`@playwright/test` não
+baixa browser via `npm ci`" precisa ser confirmado empiricamente na implementação (não assumido cegamente)
+— versões futuras do Playwright podem mudar esse comportamento de instalação; se a suposição estiver errada,
+a etapa de CI precisa de um `npx playwright install` extra.
+
+## D050 — Teardown do e2e de concorrência: curso/disciplina fixos reaproveitados (teardown completo é impossível hoje)
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/012-concorrencia-e-testes.md
+**Contexto:** O pedido original para esta fase era que o teste e2e limpasse toda a massa de dados que cria
+(matrícula, turma, disciplina, curso, alunos) via chamadas à API, sempre, mesmo em falha. Ao investigar os
+endpoints de exclusão existentes para desenhar esse teardown, encontrei uma restrição real do sistema:
+`TurmaService.excluir()` só faz soft-delete (`turma.inativar()`, a linha nunca sai do banco); e a checagem
+de FK em `CursoService.desvincularDisciplina()` (`turmaRepository.existsByCursoIdAndDisciplinaId`) **não
+filtra por `ativo`** — existe justamente para não vazar um erro 500 de violação de FK composta como um 409
+de negócio. Consequência: mesmo depois de "excluir" (soft-delete) uma Turma, o vínculo curso↔disciplina
+nunca pode ser desfeito, e por decorrência nem a Disciplina nem o Curso associados podem ser excluídos —
+não existe hard-delete de Turma em lugar nenhum da API. O teardown como pedido originalmente é, portanto,
+inexecutável para curso/disciplina com o sistema como está hoje.
+**Alternativas consideradas:**
+- Reaproveitar um curso e uma disciplina fixos entre execuções (criação idempotente: um 409 na criação é
+  tratado como "já existe, buscar id via `GET` + filtro" — o mesmo padrão que `e2e/matricula-flow.sh` já usa
+  para o Aluno fixo do script), e só criar/desfazer por repetição o que realmente precisa ser único: a Turma
+  (sempre nova, sempre soft-deletada ao final — funciona sem precondição) e os 20 Alunos (sempre novos,
+  sempre soft-deletados ao final).
+- Deixar acumular sem nenhuma limpeza — mais simples de implementar, mas suja o banco local/CI com um novo
+  curso+disciplina+turma+20 alunos a cada uma das 10 repetições, toda vez que a suíte roda.
+- Adicionar hard-delete real ao backend (`TurmaRepository`/serviços) só para viabilizar o teardown completo
+  pedido originalmente — resolveria o pedido ao pé da letra, mas expande o escopo desta fase para tocar
+  código de produção só para servir a um teste, contrariando a própria natureza desta fase (não adicionar
+  funcionalidade nova).
+**Decisão:** curso e disciplina fixos, reaproveitados de forma idempotente; turma e os 20 alunos sempre
+novos e sempre soft-deletados via `afterEach` ao final de cada repetição.
+**Justificativa (Pablo, ao ser perguntado):** confirmou a recomendação apresentada — evita tocar código de
+produção só para viabilizar um teste, e é estritamente melhor que "deixar acumular sem limpeza" (reduz a
+massa de dados órfã à Turma+Alunos, que já eram os únicos elementos que precisavam ser únicos por repetição
+de qualquer forma).
+**Trade-offs aceitos:** o curso e a disciplina fixos nunca são removidos do banco (ficam permanentemente
+ativos) — aceitável, já que só existe 1 par no total, criado uma única vez; matrículas também nunca são
+excluídas (não existe endpoint para isso), ficam presas a Turmas/Alunos inativos, mas isso já é o padrão do
+resto do app (`findByIdAndAtivoTrue` as filtra em toda consulta normal).
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se o volume de execuções locais/CI crescer
+muito, o número de Turmas soft-deletadas acumuladas no banco de desenvolvimento cresce sem limite (não afeta
+corretude, só volume de linhas órfãs) — revisitar se isso um dia virar um problema de tamanho de banco local.
+
+## D051 — Código de comparação com lock pessimista isolado em `src/test/java`, nunca em produção
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/012-concorrencia-e-testes.md
+**Contexto:** Esta fase pede uma comparação numérica real entre a estratégia atômica já em produção (D024) e
+uma variante de lock pessimista (`@Lock(LockModeType.PESSIMISTIC_WRITE)`), N=10 threads / M=1 vaga, e depois
+"remover a estratégia perdedora do caminho de produção se ela não for a escolhida". Isso implica decidir,
+antes de implementar, onde o código da variante pessimista vive durante a comparação.
+**Alternativas consideradas:**
+- Repository method `@Lock(PESSIMISTIC_WRITE)` já em `TurmaRepository` (produção), com a lógica de
+  comparação (checar+incrementar+salvar) só no teste — deixaria um método de produção não utilizado até (e
+  se) fosse promovido.
+- Repository de teste + serviço transacional mínimo inteiramente em `src/test/java`, isolado num pacote
+  próprio (`academico/concorrencia/`), importado só pelo teste de comparação via `@Import` — nada em
+  `src/main/java` muda.
+**Decisão:** tudo em `src/test/java`, nada em produção.
+**Justificativa (Pablo, ao ser perguntado):** confirmou a recomendação — torna "remover a estratégia
+perdedora do caminho de produção" um não-evento se a atômica vencer (resultado esperado, dado que já é a
+estratégia validada em produção desde a spec 006): não há nada em `src/main/java` para remover. Só há
+trabalho real de limpeza se a pessimista vencer inesperadamente, cenário tratado como fora do escopo desta
+fase (a decisão final com os números reais da comparação será registrada numa entrada própria, na task de
+fechamento desta comparação — ainda não existe nesta data).
+**Trade-offs aceitos:** depende de o Spring Boot fazer component-scan da árvore inteira
+`br.com.desafio.tecnico.gestao.*` sem restrição (confirmado — não há `@ComponentScan`/`@EnableJpaRepositories`
+customizado em `GestaoApplication`), para que um repository declarado em `src/test/java` seja descoberto
+normalmente; a implementação deve validar isso empiricamente (bean resolve no contexto do teste) antes de
+confiar no desenho.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se a pessimista vencer a comparação, promover o
+código de `src/test/java` para produção é um follow-up manual, não automático — fora do escopo desta fase.
+
+## D052 — Métrica `matricula.vaga.conflito` com tag `motivo`, primeira métrica com tag do projeto
+
+**Data:** 2026-07-13
+**Origem:** 🤝 Sugestão da IA, revisada por mim
+**Spec relacionada:** specs/012-concorrencia-e-testes.md
+**Contexto:** Esta fase pede uma métrica Micrometer visível no Grafana para conflitos/retries na confirmação
+de matrícula. O único precedente do projeto (`mensageria.dlq.eventos`, `MatriculaNotificacaoListener`) é um
+`Counter` simples, sem `Tags`. `MatriculaService.confirmar()` distingue dois motivos de conflito na mesma
+branch (`linhasAfetadas == 0`): `VAGAS_ESGOTADAS` (vaga genuinamente esgotada) e `CONFLITO_CONCORRENCIA`
+(conflito de versão não relacionado à vaga em si).
+**Alternativas consideradas:**
+- `matricula.vaga.conflito` sem tags, incrementado para os dois motivos igualmente — mais simples, segue o
+  precedente existente à risca, mas não permite distinguir os dois motivos no Grafana.
+- `matricula.vaga.conflito` com `Tags.of("motivo", errorCode)` — primeira métrica com tag do projeto, mas
+  permite separar no painel quantos conflitos são vaga esgotada vs. colisão de versão não relacionada.
+**Decisão:** com tag `motivo`.
+**Justificativa (Pablo, ao ser perguntado):** preferiu a variante com tag em vez do default sem tags que eu
+propus — quis poder distinguir os dois motivos no painel do Grafana, mesmo sendo a primeira métrica do
+projeto a usar tags.
+**Trade-offs aceitos:** rompe a uniformidade com o único precedente existente (`mensageria.dlq.eventos`, sem
+tags) — a partir daqui, "métrica de negócio simples sem tags" deixa de ser o padrão implícito único do
+projeto; cardinalidade da tag é baixa e fixa (2 valores possíveis), sem risco de explosão de séries no
+Prometheus.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado — cardinalidade fixa e
+baixa, sem risco de crescimento não controlado.
 
