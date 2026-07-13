@@ -3,6 +3,7 @@ import { roleGuard } from './core/auth/role.guard';
 
 const SECRETARIA_ADMIN = ['SECRETARIA', 'ADMIN'];
 const ALUNO = ['ALUNO'];
+const ADMIN = ['ADMIN'];
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'turmas' },
@@ -104,6 +105,14 @@ export const routes: Routes = [
     loadComponent: () => import('./features/aluno/aluno-form.component').then((m) => m.AlunoFormComponent),
     canActivate: [roleGuard],
     data: { papeis: SECRETARIA_ADMIN },
+  },
+
+  {
+    path: 'administracao/usuarios',
+    loadComponent: () =>
+      import('./features/administracao/usuarios-lista.component').then((m) => m.UsuariosListaComponent),
+    canActivate: [roleGuard],
+    data: { papeis: ADMIN },
   },
 
   {
