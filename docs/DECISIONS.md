@@ -67,6 +67,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D045 — Escopo e integração técnica da administração de usuários/papéis](#d045)
 - [D046 — Decisões menores agrupadas: módulo `administracao`, seção Administração da sidebar adiada, service account do `gestao-backend`](#d046)
 - [D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)](#d047)
+- [D048 — `AdministracaoUsuarioService.listarUsuarios()` resolve papel via membros de role (O(3)), não N+1 por usuário](#d048)
 
 ---
 
@@ -1907,4 +1908,35 @@ profundas de layout por página, caso surjam no futuro.
 account console ou e-mail, essa é uma extensão natural do mesmo `keycloak-theme/`, não uma nova decisão de
 localização. Se o fluxo de build/volume se mostrar frágil (ex: nome de artefato mudando entre versões do
 Keycloakify), reconsiderar imagem Docker customizada como abordagem mais determinística.
+
+## D048 — `AdministracaoUsuarioService.listarUsuarios()` resolve papel via membros de role (O(3)), não N+1 por usuário
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/010-administracao-usuarios-papeis.md
+**Contexto:** O código de referência da Task 3 do plano de execução
+(`docs/superpowers/plans/2026-07-12-administracao-usuarios-papeis.md`) resolvia o papel de cada usuário
+listado com uma chamada adicional à Admin API do Keycloak por usuário (`realmResource.users().get(id)
+.roles().realmLevel().listAll()`) — ou seja, 1 chamada para listar N usuários + N chamadas para resolver
+papel, um padrão de amplificação de requisições (N+1). O `task-reviewer` da Task 3 levantou isso como
+achado Important, mas observou que era o próprio texto do plano (não um desvio do subagent implementador),
+e sugeriu como alternativa consultar os membros das 3 roles gerenciadas diretamente
+(`RolesResource.get(papel).getUserMembers()`, O(3) chamadas) e montar um mapa `userId -> papel`.
+**Alternativas consideradas:**
+- Manter N+1 como estava (aceitar como trade-off documentado) — mais simples de ler, mas degrada linearmente
+  com o número de usuários do realm; tela de baixo tráfego hoje, mas sem necessidade real de manter o
+  padrão mais caro.
+- Trocar para O(3) via `getUserMembers()` por role — mais robusto à medida que a base de usuários cresce,
+  mesmo número de chamadas independente de N.
+**Decisão:** O(3) via `getUserMembers()` das 3 roles gerenciadas.
+**Justificativa (Pablo, ao ser perguntado):** preferiu corrigir agora em vez de carregar uma pendência de
+performance conhecida para depois — o custo de corrigir na hora é baixo (mesma task, subagent já mobilizado)
+e evita ter que revisitar isso caso a base de usuários de teste cresça durante o resto do desenvolvimento.
+**Trade-offs aceitos:** a lógica de montagem do mapa `userId -> papel` é um pouco menos direta de ler do que
+"perguntar o papel deste usuário" por usuário; depende de `getUserMembers()` não paginar silenciosamente sem
+os parâmetros certos (a implementação precisa confirmar que a API retorna todos os membros de cada role sem
+paginação implícita, dado o volume pequeno esperado no realm local/de teste).
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se o Keycloak passar a impor paginação
+obrigatória em `getUserMembers()` para realms grandes, revisitar a estratégia (ex: paginação explícita ou
+cache local do mapeamento papel→usuários).
 

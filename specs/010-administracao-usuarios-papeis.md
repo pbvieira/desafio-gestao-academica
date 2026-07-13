@@ -64,7 +64,9 @@ controller → service → cliente Keycloak, camada convencional já usada nos d
 - `AdministracaoUsuarioService`: injeta um `Keycloak` (cliente admin, `KeycloakBuilder.builder()...grantType(CLIENT_CREDENTIALS)`, configurado como `@Bean` em `MensageriaConfig`-style `KeycloakAdminConfig` novo, lendo `issuer-uri`/`client-id`/`client-secret` de `application.properties`/`.env`). Métodos: `listarUsuarios()` (mapeia `UserRepresentation` + role mapping para um DTO simples `UsuarioAdminDto(id, username, nome, email, papel)`), `reatribuirPapel(id, papel)` (remove o role mapping atual entre ALUNO/SECRETARIA/ADMIN e adiciona o novo — um usuário só tem um desses três papéis por vez, por construção do realm).
 - DTOs na borda (`UsuarioAdminDto`, `ReatribuirPapelRequest{papel}`), nunca expõe `UserRepresentation` do
   Keycloak diretamente pela API.
-- Erros: `UsuarioNaoEncontradoException`→404, `PapelInvalidoException`→400, seguindo o mesmo padrão de
+- Erros: reusa `RecursoNaoEncontradoException`→404 (já existente, sem exceção nova — ajustado na
+  implementação da Task 3 em relação ao rascunho original desta seção); papel inválido no `PATCH`→400 via
+  enum Java + `HttpMessageNotReadableException` já tratado pelo `GlobalExceptionHandler`, mesmo padrão de
   `ProblemDetail`/`errorCode` já estabelecido (D016).
 
 **Config Keycloak:** `docker/keycloak/import/gestao-realm.json`, client `gestao-backend`:
@@ -85,6 +87,7 @@ demais componentes de listagem).
 | 2 | Como o backend chama a Admin API do Keycloak | `keycloak-admin-client` (SDK oficial) vs. REST manual vs. frontend chamando direto (descartada) | [D045](../docs/DECISIONS.md#d045) — `keycloak-admin-client` |
 | 3 | Quem acessa a tela | Só ADMIN vs. SECRETARIA e ADMIN (mantém equivalência atual) | [D045](../docs/DECISIONS.md#d045) — só ADMIN |
 | 4 | Onde vive o código novo no backend | Módulo novo `administracao` vs. dentro de `security` | [D046](../docs/DECISIONS.md#d046) — módulo novo `administracao` |
+| 5 | Como `listarUsuarios()` resolve o papel de cada usuário | N+1 chamadas (1 por usuário) vs. O(3) via membros de cada role gerenciada | [D048](../docs/DECISIONS.md#d048) — O(3), membros de role |
 
 ## 6. Critérios de aceite
 
