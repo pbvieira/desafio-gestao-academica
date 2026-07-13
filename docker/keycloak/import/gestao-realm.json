@@ -46,7 +46,7 @@
       "enabled": true,
       "serviceAccountClientId": "gestao-backend",
       "clientRoles": {
-        "realm-management": ["view-users", "manage-users", "query-users"]
+        "realm-management": ["view-users", "manage-users", "query-users", "view-realm"]
       }
     }
   ],

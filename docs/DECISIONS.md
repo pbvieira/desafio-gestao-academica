@@ -1882,6 +1882,23 @@ de padrões já estabelecidos no projeto (separação de módulo por contexto, D
 antes da spec 010, decidir na execução se a seção "Administração" fica oculta até a rota existir ou
 aparece com um placeholder — detalhe de sequenciamento, não uma decisão de arquitetura.
 
+**Refinamento (2026-07-13) — client role `view-realm` faltante bloqueava `listarUsuarios()`:** ao rodar o
+e2e real (`e2e/administracao-papel-flow.sh`, Task 6 do plano de execução) contra a stack completa pela
+primeira vez, `GET /api/admin/usuarios` retornava 500 — causa raiz: `jakarta.ws.rs.ForbiddenException`
+(403) dentro de `AdministracaoUsuarioService`, na chamada `realmResource.roles().get(papel)
+.getUserMembers()`. O role mapping original desta entrada (`view-users`/`manage-users`/`query-users`)
+cobre operações sobre *usuários*, mas o endpoint de membros de uma *role* (`/roles/{role-name}/users`) é
+avaliado pelo Keycloak como operação de *realm* (`RoleContainerResource`), exigindo `view-realm` — não
+apenas `view-users` — mesmo quando a chamada é, na prática, "sobre usuários" do ponto de vista do nosso
+domínio. Confirmado empiricamente: consultando o role mapping do service account via Admin API (token de
+admin mestre, leitura), faltava `view-realm`; concedendo-o ao vivo (autorizado explicitamente pelo Pablo
+antes da mudança, por ser uma escalação de permissão) o e2e passou integralmente nas 5 etapas. Corrigido
+adicionando `view-realm` à lista de `clientRoles` do service account em
+`docker/keycloak/import/gestao-realm.json`. Classificado como correção de uma lacuna na config original
+desta entrada (D046), não uma decisão de design nova — não há alternativa razoável para "como conceder
+list-membros-de-role", é um requisito técnico da Admin API do Keycloak, mesmo padrão de "requisito técnico
+sem alternativa" já usado para `serviceAccountsEnabled` acima.
+
 ## D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)
 
 **Data:** 2026-07-13
