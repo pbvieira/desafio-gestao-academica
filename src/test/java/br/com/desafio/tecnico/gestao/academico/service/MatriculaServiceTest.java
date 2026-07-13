@@ -3,11 +3,12 @@ package br.com.desafio.tecnico.gestao.academico.service;
 import java.util.List;
 import java.util.Optional;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.tracing.Tracer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,8 +56,15 @@ class MatriculaServiceTest {
 	@Mock
 	private Tracer tracer;
 
-	@InjectMocks
+	private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
 	private MatriculaService matriculaService;
+
+	@BeforeEach
+	void setUp() {
+		matriculaService = new MatriculaService(matriculaRepository, turmaRepository, alunoRepository,
+				eventPublisher, tracer, meterRegistry);
+	}
 
 	@Test
 	void criar_alunoInexistente_lancaRecursoNaoEncontrado() {
@@ -155,6 +163,8 @@ class MatriculaServiceTest {
 				.isEqualTo("VAGAS_ESGOTADAS");
 		verify(matriculaRepository, never()).save(any());
 		verify(eventPublisher, never()).publishEvent(any());
+		assertThat(meterRegistry.counter("matricula.vaga.conflito", "motivo", "VAGAS_ESGOTADAS").count())
+				.isEqualTo(1.0);
 	}
 
 	@Test
@@ -169,6 +179,8 @@ class MatriculaServiceTest {
 		assertThatThrownBy(() -> matriculaService.confirmar(1L)).isInstanceOf(ConflitoRegraNegocioException.class)
 				.extracting(ex -> ((ConflitoRegraNegocioException) ex).getErrorCode())
 				.isEqualTo("CONFLITO_CONCORRENCIA");
+		assertThat(meterRegistry.counter("matricula.vaga.conflito", "motivo", "CONFLITO_CONCORRENCIA").count())
+				.isEqualTo(1.0);
 	}
 
 	@Test

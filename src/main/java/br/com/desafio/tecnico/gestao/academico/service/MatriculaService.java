@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
 import org.springframework.context.ApplicationEventPublisher;
@@ -38,14 +39,17 @@ public class MatriculaService {
 	private final AlunoRepository alunoRepository;
 	private final ApplicationEventPublisher eventPublisher;
 	private final Tracer tracer;
+	private final MeterRegistry meterRegistry;
 
 	public MatriculaService(MatriculaRepository matriculaRepository, TurmaRepository turmaRepository,
-			AlunoRepository alunoRepository, ApplicationEventPublisher eventPublisher, Tracer tracer) {
+			AlunoRepository alunoRepository, ApplicationEventPublisher eventPublisher, Tracer tracer,
+			MeterRegistry meterRegistry) {
 		this.matriculaRepository = matriculaRepository;
 		this.turmaRepository = turmaRepository;
 		this.alunoRepository = alunoRepository;
 		this.eventPublisher = eventPublisher;
 		this.tracer = tracer;
+		this.meterRegistry = meterRegistry;
 	}
 
 	/**
@@ -105,9 +109,11 @@ public class MatriculaService {
 			Turma turmaAtual = turmaRepository.findById(turma.getId())
 					.orElseThrow(() -> new RecursoNaoEncontradoException("Turma '" + turma.getId() + "' não encontrada."));
 			if (turmaAtual.getVagasOcupadas() >= turmaAtual.getLimiteVagas()) {
+				meterRegistry.counter("matricula.vaga.conflito", "motivo", "VAGAS_ESGOTADAS").increment();
 				throw new ConflitoRegraNegocioException(
 						"Não há vagas disponíveis na turma '" + turmaAtual.getCodigo() + "'.", "VAGAS_ESGOTADAS");
 			}
+			meterRegistry.counter("matricula.vaga.conflito", "motivo", "CONFLITO_CONCORRENCIA").increment();
 			throw new ConflitoRegraNegocioException(
 					"Conflito de concorrência ao confirmar a matrícula '" + id + "'. Tente novamente.",
 					"CONFLITO_CONCORRENCIA");

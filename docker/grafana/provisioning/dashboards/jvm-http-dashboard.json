@@ -60,6 +60,20 @@
           "expr": "system_cpu_usage{application=\"gestao\"} * 100"
         }
       ]
+    },
+    {
+      "id": 5,
+      "title": "Conflitos de vaga na confirmação de matrícula / s",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus-uid" },
+          "expr": "sum(rate(matricula_vaga_conflito_total{application=\"gestao\"}[1m])) by (motivo)",
+          "legendFormat": "{{motivo}}"
+        }
+      ]
     }
   ]
 }
