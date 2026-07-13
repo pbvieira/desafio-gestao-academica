@@ -28,7 +28,6 @@ KC="http://localhost:${KEYCLOAK_HTTP_PORT}"
 APP="http://localhost:${APP_PORT}"
 REALM="gestao"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
 
 falhas=0
 
@@ -48,10 +47,6 @@ obter_token() {
 
 extrair_token() {
 	python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('access_token',''))" "$1"
-}
-
-extrair_campo() {
-	python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2],''))" "$1" "$2"
 }
 
 # Decodifica os papeis (realm_access.roles) do JWT (recebido como argumento, ja
