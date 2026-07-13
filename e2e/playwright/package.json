@@ -1,0 +1,12 @@
+{
+  "name": "e2e-concorrencia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prova e2e de concorrencia (disputa de 20 alunos pela ultima vaga) - specs/012-concorrencia-e-testes.md",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

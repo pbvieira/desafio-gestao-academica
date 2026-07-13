@@ -78,6 +78,21 @@ jobs:
       - name: E2E administracao de usuarios/papeis (specs/010)
         run: bash e2e/administracao-papel-flow.sh
 
+      - name: Configurar Node 22 para o e2e de concorrencia (specs/012, D049)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: e2e/playwright/package-lock.json
+
+      - name: Instalar dependencias do e2e de concorrencia
+        working-directory: e2e/playwright
+        run: npm ci
+
+      - name: E2E concorrencia - disputa de 20 alunos pela ultima vaga, 10x (specs/012, D024/D049/D050)
+        working-directory: e2e/playwright
+        run: npx playwright test --repeat-each=10
+
       - name: Diagnostico em caso de falha
         if: failure()
         run: |
