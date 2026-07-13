@@ -1,6 +1,6 @@
 # 012 — Concorrência e testes consolidados (Fase 6 unificada)
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §02 (regra de limite de vagas), §06 (critérios eliminatórios — prova de
 concorrência é o item mais citado), §07 (diferenciais — observabilidade), §09 (perguntas de entrevista sobre
 concorrência e escala)
@@ -112,24 +112,24 @@ de `matricula.vaga.conflito` por `motivo`.
 
 ## 6. Critérios de aceite
 
-- [ ] `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts` roda 10x consecutivas
+- [x] `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts` roda 10x consecutivas
   (`--repeat-each=10`) com exatamente 1×200 e 19×409/`VAGAS_ESGOTADAS` em cada uma, sem exceção não
   tratada/timeout/resultado ambíguo.
-- [ ] Teardown (`afterEach`) executa mesmo em caso de falha do teste, soft-deletando turma e os 20 alunos de
+- [x] Teardown (`afterEach`) executa mesmo em caso de falha do teste, soft-deletando turma e os 20 alunos de
   cada repetição.
-- [ ] Novo step Playwright incluído e verde em `.github/workflows/ci.yml` (job `build`).
-- [ ] Teste de comparação JVM (N=10/M=1) passa para as duas estratégias, com corretude (exatamente 1
+- [x] Novo step Playwright incluído e verde em `.github/workflows/ci.yml` (job `build`).
+- [x] Teste de comparação JVM (N=10/M=1) passa para as duas estratégias, com corretude (exatamente 1
   sucesso), tempo total e contagem de exceções logados e coletados.
-- [ ] Nenhum código de lock pessimista existe em `src/main/java` (verificável por `grep`).
-- [ ] Nova entrada em `docs/DECISIONS.md` registra a decisão final (manter/trocar) com os números reais das
+- [x] Nenhum código de lock pessimista existe em `src/main/java` (verificável por `grep`).
+- [x] Nova entrada em `docs/DECISIONS.md` registra a decisão final (manter/trocar) com os números reais das
   duas provas.
-- [ ] `./mvnw clean verify` passa com o gate JaCoCo ≥80% mantido, incluindo os novos testes.
-- [ ] Toda cobertura nova adicionada (Task 5) é rastreável a uma lacuna nomeada (regra PRD §02 ou caminho de
+- [x] `./mvnw clean verify` passa com o gate JaCoCo ≥80% mantido, incluindo os novos testes.
+- [x] Toda cobertura nova adicionada (Task 5) é rastreável a uma lacuna nomeada (regra PRD §02 ou caminho de
   erro específico), não "para bater número".
-- [ ] Contador `matricula.vaga.conflito` (tag `motivo`) incrementa corretamente em conflito real, verificado
+- [x] Contador `matricula.vaga.conflito` (tag `motivo`) incrementa corretamente em conflito real, verificado
   manualmente com dado real no painel Grafana.
-- [ ] Spec atualizada com a seção "resposta de entrevista preparada" preenchida com números reais.
-- [ ] `docs/ROADMAP.md` (Fase 6 → Concluída) e `README.md` (concorrência + como rodar `e2e/playwright/`)
+- [x] Spec atualizada com a seção "resposta de entrevista preparada" preenchida com números reais.
+- [x] `docs/ROADMAP.md` (Fase 6 → Concluída) e `README.md` (concorrência + como rodar `e2e/playwright/`)
   atualizados.
 
 ## 7. Plano de testes
@@ -161,33 +161,63 @@ reais, não em preferência teórica, que é o que o teste de comparação entre
 
 ## 9. Definition of Done desta tarefa
 
-- [ ] Critérios de aceite (seção 6) atendidos
-- [ ] Testes da seção 7 implementados e passando
-- [ ] Cobertura ≥ 80% no(s) módulo(s) afetado(s), com sentido (ver CLAUDE.md item 5)
-- [ ] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D049-D053 registradas)
-- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados
-- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados
-- [ ] Esta spec atualizada para refletir o que foi de fato implementado
-- [ ] `./mvnw clean verify` passando
+- [x] Critérios de aceite (seção 6) atendidos
+- [x] Testes da seção 7 implementados e passando
+- [x] Cobertura ≥ 80% no(s) módulo(s) afetado(s), com sentido (ver CLAUDE.md item 5)
+- [x] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D049-D053 registradas)
+- [x] `code-reviewer` executado — achados endereçados ou justificadamente descartados
+- [x] `security-auditor` executado — achados endereçados ou justificadamente descartados
+- [x] Esta spec atualizada para refletir o que foi de fato implementado
+- [x] `./mvnw clean verify` passando
 
 ## 10. Resposta de entrevista preparada
 
-<A preencher ao final da Task 7, com os números reais coletados nas Tasks 2 e 3.>
+Três perguntas prováveis (PRD §09) com a resposta pronta, apoiada em números reais coletados nesta fase —
+não em raciocínio teórico.
 
 **"O que acontece se 20 pessoas tentarem confirmar a última vaga ao mesmo tempo?"**
 
-<Números reais da Task 2: quantas execuções (10/10), resultado de cada uma (1×200/19×409), tempo
-observado.>
+Testado de verdade, não simulado: `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts` cria 1
+turma com 1 vaga e 20 alunos, e dispara as 20 confirmações via `POST /api/matriculas/{id}/confirmar`
+verdadeiramente em paralelo (`Promise.all`, sem `await` sequencial entre elas), por HTTP real contra a
+aplicação de pé e autenticação real via Keycloak (não MockMvc, não JWT simulado). Rodado com
+`--repeat-each=10`, duas vezes seguidas — **20 execuções no total** — e em **todas as 20** o resultado foi
+idêntico: **exatamente 1 requisição recebeu `200` (a confirmação bem-sucedida) e as outras 19 receberam
+`409` com `errorCode: VAGAS_ESGOTADAS`**. Zero exceção não tratada, zero timeout, zero resultado ambíguo
+(nunca 2 sucessos, nunca 0 sucessos) em nenhuma das execuções. O teardown (soft-delete da turma e dos 20
+alunos de cada execução, preservando curso/disciplina fixos — D050) também rodou sem falha nas 20 vezes.
+Isso é a prova empírica de que o `UPDATE` condicional atômico (D024, em produção desde a spec 006) se
+comporta corretamente sob disputa real, em escala de 20 concorrentes — não só nos 2 threads dos testes de
+integração já existentes.
 
 **"Por que UPDATE atômico condicional em vez de lock pessimista?"**
 
-<Números reais da Task 3: tempo total e contagem de exceções de cada estratégia, com referência a D024 e à
-decisão final da Task 4.>
+Comparação numérica isolada a nível de JVM/repository (N=10 threads disputando M=1 vaga, uma execução por
+estratégia, código de comparação vivendo só em `src/test/java/.../academico/concorrencia/`, nunca em
+produção — D051): a estratégia atômica já em produção (`TurmaRepository.consumirVaga`, D024) produziu
+`sucessos=1, conflitos=9, excecoesInesperadas=0, tempoTotalMs=32`; a variante com
+`@Lock(LockModeType.PESSIMISTIC_WRITE)` produziu `sucessos=1, conflitos=9, excecoesInesperadas=0,
+tempoTotalMs=33`. Corretude idêntica entre as duas; a diferença de tempo (32ms vs. 33ms) é estatisticamente
+insignificante nessa escala e execução única — ruído de medição, não sinal de performance real. Com nenhuma
+vantagem mensurável demonstrada pela pessimista, e com a atômica evitando manter um lock de linha aberto
+pela duração de uma transação inteira (menor risco de cadeia de espera crescer sob carga maior que a
+testada aqui), a decisão final (D053) foi manter a estratégia atômica condicional de D024 — nenhuma mudança
+em `src/main/java`. O harness de comparação pessimista permanece no repositório como benchmark permanente
+(nunca existiu no caminho de produção, D051).
 
 **"Como isso mudaria com muitas instituições simultâneas?"**
 
-<Conexão com D002 (RabbitMQ) — mensageria assíncrona já isola o fluxo de notificação/auditoria do caminho
-crítico de confirmação; a contenção de vaga em si é por turma (linha), não por instituição, então o
-paralelismo entre instituições diferentes não compete pela mesma linha. Detalhar limites conhecidos (D024
-já registra o ponto de revisão: se a escala crescer para "flash sale", reconsiderar reserva via
-fila/Redis).>
+A contenção de vaga acontece na linha da `Turma` específica (`UPDATE ... WHERE id = ?`), não em nenhum
+recurso compartilhado entre instituições — duas instituições diferentes confirmando matrículas em turmas
+diferentes não competem pela mesma linha, então mais instituições, por si só, não aumentam a contenção
+medida aqui. O gargalo real de escala não é "número de instituições", é volume de escrita concorrente na
+*mesma* turma popular (ex: uma turma de grande procura de uma única instituição recebendo milhares de
+confirmações simultâneas) — cenário de ordem de grandeza diferente do testado (20 concorrentes). A
+mensageria assíncrona (D002, RabbitMQ) já isola esse caminho crítico de escrita do fluxo de
+notificação/auditoria — mais instituições gerando mais eventos de domínio não pressiona a confirmação de
+matrícula, porque a publicação é assíncrona e teria fila/consumidor próprios por volume. O limite honesto da
+abordagem atual já está registrado no próprio D024: se a carga real de matrícula concorrente numa única
+turma crescer para escala de "flash sale" (milhares de req/s pela mesma linha), o padrão a revisitar é
+reserva de vaga via Redis + fila — decisão consciente de não implementar isso agora, porque a pesquisa de
+mercado que embasou D024 aponta o `UPDATE` condicional como o padrão robusto certo para contenção moderada
+(a realidade de capacidade de turma), não para volume de flash sale.

@@ -81,8 +81,35 @@ definida.
 ./mvnw clean verify
 ```
 
-Roda os testes automatizados e o gate de cobertura JaCoCo (≥ 80% de linha/branch,
-exclusões documentadas em `docs/DECISIONS.md`, D014).
+Roda os testes automatizados (unitários + integração via Testcontainers) e o gate de
+cobertura JaCoCo (≥ 80% de linha/branch, exclusões documentadas em `docs/DECISIONS.md`,
+D014).
+
+**E2E de fluxo de negócio (bash + `curl`):** scripts em `e2e/*.sh`, cada um cobrindo um
+fluxo ponta a ponta real (HTTP + Keycloak reais, não simulados) — `smoke-test.sh`
+(infraestrutura), `matricula-flow.sh` (fluxo de matrícula, `specs/006-matricula.md`) e
+`administracao-papel-flow.sh` (reatribuição de papel, `specs/010-...`). Pressupõem a stack
+já de pé (`docker compose up` + `./mvnw spring-boot:run`); é o que o job `build` do CI
+executa depois de `./mvnw clean verify`:
+
+```bash
+bash e2e/smoke-test.sh
+bash e2e/matricula-flow.sh
+bash e2e/administracao-papel-flow.sh
+```
+
+**E2E de concorrência (Playwright):** prova a disputa de 20 alunos pela última vaga de uma
+turma, 10 execuções consecutivas. Requer Node 22.
+
+```bash
+cd e2e/playwright
+npm install
+npx playwright test --repeat-each=10
+```
+
+Pressupõe a mesma stack já de pé que os demais scripts de `e2e/` (Postgres/Keycloak via
+`docker compose up`, aplicação via `./mvnw spring-boot:run`). Detalhe do mecanismo provado
+e dos números reais coletados na seção "Proteção de vaga e prova de concorrência" abaixo.
 
 ## Tecnologias
 
@@ -131,6 +158,35 @@ no próximo start (`spring.modulith.events.republish-outstanding-events-on-resta
 **Risco conhecido (não mitigado neste desafio):** a rede do compose não exige autenticação
 adicional entre serviços além das credenciais do `.env` — aceitável em desenvolvimento,
 mas exigiria mTLS/segmentação de rede em produção (ver `docs/DECISIONS.md`, D035).
+
+## Proteção de vaga e prova de concorrência
+
+A regra de negócio mais crítica do PRD (§02/§06: consumo de vaga sob matrícula concorrente)
+é protegida por um `UPDATE` condicional atômico — `TurmaRepository.consumirVaga`,
+`UPDATE turma SET vagas_ocupadas = vagas_ocupadas + 1, version = version + 1 WHERE id = ?
+AND version = ? AND vagas_ocupadas < limite_vagas`, em produção desde a spec 006
+(`docs/DECISIONS.md`, D024). A checagem e a escrita acontecem no mesmo statement SQL —
+não há janela entre "ler vagas disponíveis" e "gravar a confirmação" em que duas
+requisições concorrentes possam contar a mesma vaga como livre; o próprio lock de linha do
+Postgres durante o `UPDATE` serializa as tentativas.
+
+**Prova real (não teórica):** `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts`
+dispara 20 confirmações verdadeiramente simultâneas (`Promise.all`, sem await sequencial)
+contra 1 turma com 1 única vaga, via HTTP real e Keycloak real (não MockMvc/JWT simulado).
+Repetido 10x consecutivas, duas vezes (20 execuções no total): em **todas** o resultado foi
+exatamente **1×200 (sucesso) e 19×409 com `errorCode: VAGAS_ESGOTADAS`**, sem nenhuma
+exceção não tratada, timeout ou resultado ambíguo — ver como rodar em "Como rodar os
+testes" acima, e a decisão registrada em `docs/DECISIONS.md` (D053).
+
+**Por que `UPDATE` atômico em vez de lock pessimista:** uma comparação numérica separada,
+a nível de JVM/repository (N=10 threads disputando 1 vaga, `src/test/java/.../academico/
+concorrencia/`, nunca em produção — D051), mostrou corretude idêntica entre as duas
+estratégias (1 sucesso, 9 conflitos, 0 exceções inesperadas em ambas) e diferença de tempo
+estatisticamente insignificante (32ms vs. 33ms, ruído de medição). Com nenhuma vantagem de
+performance demonstrada pelo lock pessimista, e como a estratégia atômica evita manter um
+lock de linha aberto pela duração de uma transação, a decisão final (D053) foi manter o
+`UPDATE` condicional (D024) — nenhuma mudança em produção. Resposta de entrevista completa,
+com os números e o raciocínio de escala, em `specs/012-concorrencia-e-testes.md`, seção 10.
 
 ## Observabilidade
 
