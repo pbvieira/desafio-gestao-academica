@@ -222,6 +222,21 @@ subir o Keycloak — nenhum passo manual necessário no ambiente local do `compo
 (`ForbiddenException` da Admin API do Keycloak ao consultar membros de role) — se for reproduzir este
 realm do zero fora do `compose.yaml`, confira esse role mapping do service account antes de tudo.
 
+**Tema visual do login:** a tela de login do Keycloak usa um tema próprio (Keycloakify,
+`keycloak-theme/`, tema `gestao-academico`) que reaplica a mesma identidade "Institucional acadêmico" do
+frontend Angular (specs 009 e 011). Antes de subir o Docker Compose (ou sempre que o código em
+`keycloak-theme/src` mudar), gere o artefato do tema:
+
+```bash
+cd keycloak-theme && npm install && npm run build-keycloak-theme
+```
+
+Isso cria `keycloak-theme/dist_keycloak/keycloak-theme.jar`, montado automaticamente em
+`/opt/keycloak/providers` pelo `compose.yaml` (`docker compose up`). Sem esse build, o Keycloak sobe com o
+tema padrão (o volume simplesmente fica vazio). Como este `compose.yaml` não mantém volume persistente
+para o Postgres do Keycloak, um `docker compose down && docker compose up` sempre reimporta o realm do
+zero — não há passo manual adicional para o `loginTheme` ser aplicado.
+
 ## Documentação
 
 - `docs/ROADMAP.md` — planejamento em fases feito antes de começar, e como a execução real

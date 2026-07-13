@@ -1,6 +1,6 @@
 # 011 — Tema Keycloakify para o login do Keycloak
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §05 (documento arquitetural/README deve cobrir Keycloak e como o
 usuário interage com ele), critério transversal de "identidade visual coerente" do desafio
 **Módulo(s) Modulith afetado(s):** N/A — só `keycloak-theme/` (novo, fora do Modulith Java) e
@@ -87,18 +87,18 @@ realm `gestao`.
 
 ## 6. Critérios de aceite
 
-- [ ] Tela de login do realm `gestao` (`/realms/gestao/protocol/openid-connect/auth?...`) exibe a paleta
+- [x] Tela de login do realm `gestao` (`/realms/gestao/protocol/openid-connect/auth?...`) exibe a paleta
   navy/dourado, fonte serifada no título e o bloco de marca (ícone + "Gestão Acadêmica"), em vez do tema
   padrão do Keycloak.
-- [ ] Tela de erro genérica do Keycloak também reflete o novo tema (mesmo `Template`, herdado
+- [x] Tela de erro genérica do Keycloak também reflete o novo tema (mesmo `Template`, herdado
   automaticamente).
-- [ ] `docker/keycloak/import/gestao-realm.json` referencia `loginTheme: gestao-academico` e o Keycloak
+- [x] `docker/keycloak/import/gestao-realm.json` referencia `loginTheme: gestao-academico` e o Keycloak
   sobe sem erro de tema não encontrado.
-- [ ] `docker compose up` (após o build do tema) não requer nenhum passo manual adicional dentro do
+- [x] `docker compose up` (após o build do tema) não requer nenhum passo manual adicional dentro do
   container para o tema ficar disponível.
-- [ ] Nenhum fluxo de login/autenticação existente (RBAC/ABAC, emissão de token, redirecionamento
+- [x] Nenhum fluxo de login/autenticação existente (RBAC/ABAC, emissão de token, redirecionamento
   pós-login do Angular) regride.
-- [ ] README atualizado com o passo de build do tema e a observação sobre a nova aparência do login.
+- [x] README atualizado com o passo de build do tema e a observação sobre a nova aparência do login.
 
 ## 7. Plano de testes
 
@@ -132,3 +132,13 @@ de forma mais direta que com um teste automatizado dedicado.
 - [ ] Esta spec atualizada para refletir o que foi de fato implementado
 - [ ] README atualizado (passo de build do tema)
 - [ ] `./mvnw clean verify` continua passando (nenhuma mudança em `src/`, mas verificação de não-regressão)
+
+## 10. Validação manual realizada
+
+- `docker compose down && docker compose up -d postgres keycloak` seguido de inspeção dos logs — sem erro
+  de provider/tema.
+- `curl .../realms/gestao/protocol/openid-connect/auth?...` retornando HTML com "Gestão Acadêmica".
+- Verificação visual no navegador: cabeçalho navy/dourado, card branco, botão primário navy, título em
+  fonte serifada.
+- `curl .../protocol/openid-connect/token` (grant de senha, `aluno.teste`) continua retornando um access
+  token válido — sem regressão no fluxo de autenticação.
