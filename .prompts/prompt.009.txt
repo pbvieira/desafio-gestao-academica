@@ -101,9 +101,9 @@ teórica, D024 já descarta para a escala real deste sistema); revisão exaustiv
 os testes já escritos nas fases anteriores (item 4 já reduzido acima).
 
 SIGA O FLUXO DO CLAUDE.md:
-1. Confirme o próximo número de spec livre com `ls specs/` (não será `009` nem `010`,
-   já existem — provavelmente `011`). Crie `specs/0NN-concorrencia-e-testes.md` a partir
-   do template.
+1. Confirme o próximo número de spec livre com `ls specs/` (não será `009`, `010` nem
+   `011`, já existem — provavelmente `012`). Crie `specs/0NN-concorrencia-e-testes.md` a
+   partir do template.
 2. Levante via skill decision-log, ANTES de implementar: (a) N/M exatos do teste JVM do
    item 2; (b) mecanismo exato de teardown do e2e do item 1; (c) qualquer outra decisão
    não-trivial identificada.

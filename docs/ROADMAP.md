@@ -47,6 +47,7 @@ ponto do desenvolvimento.
 | 5 | Frontend Angular mínimo: telas dos fluxos principais, consumo da API, tratamento de erro | **Concluída** — spec 008 |
 | 5b *(fora do plano original)* | Redesign visual do frontend (nova identidade "Institucional acadêmico" + sidebar) — diferencial pedido pelo Pablo após ver o resultado da Fase 5, não estava no plano original | **Concluída** — spec 009 |
 | 5c *(fora do plano original)* | Administração de usuários/papéis (tela ADMIN-only para reatribuir papel via Keycloak Admin API) — diferencial pedido junto com a 5b | **Concluída** — spec 010 (6 tasks executadas via subagent-driven-development, revisão final de branch aprovada em 2026-07-13; decisões D045/D046/D048) |
+| 5d *(fora do plano original)* | Tema Keycloakify para o login do Keycloak (identidade visual "Institucional acadêmico" reaplicada às telas de autenticação, entregue como JAR provider via volume) — diferencial pedido junto com a 5b/5c, não estava no plano original | **Concluída** — spec 011 (5 tasks executadas via subagent-driven-development, revisão final de branch aprovada em 2026-07-13; decisão D047) |
 | 6 *(unifica as antigas 6+7 — decisão do Pablo, 2026-07-12)* | Testes consolidados + concorrência aprofundada num único ciclo, com a prova e2e da disputa pela última vaga (20 alunos, via confirmação concorrente) como prioridade 1, não como item de auditoria genérica. Comparação com lock pessimista simplificada (sem benchmark de carga elaborado) — ver `.prompts/prompt.009.txt` (reescrito) e a nota "Fase 6 unificada" abaixo | Pendente |
 | 7 *(renomeada da antiga Fase 8 — decisão do Pablo, 2026-07-12)* | Finalização: documento arquitetural curto (PRD §04, deliverable distinto do README que ainda não existe como arquivo próprio), revisão final de consistência entre README/ROADMAP/DECISIONS/specs, checklist literal do PRD §06/§08, gate e2e completo, "pitch" de entrevista consolidado — ver `.prompts/prompt.010.txt` (reescrito) e a nota "Fase 7 reimaginada" abaixo | Pendente |
 
@@ -62,12 +63,13 @@ tarefa de consolidação de documentação. A concorrência aprofundada já tem 
 desde a spec 006; o que resta é a resposta de entrevista/documento arquitetural curto mencionado no PRD
 §05, ainda não escrito separadamente do que já existe em `docs/DECISIONS.md`.
 
-**Nota sobre numeração de specs/prompts (2026-07-12):** as Fases 5b/5c (redesign visual + administração
-de usuários) não estavam no plano original — foram inseridas depois de ver o resultado da Fase 5, e
-consumiram os números `specs/009` e `specs/010`. Isso significa que a Fase 6 (unificada) e a Fase 7
-(renomeada) precisam ser numeradas a partir de `specs/011` — **não** `009`/`010`, que já existem e estão
-fechados/em andamento. Ao dar continuidade, confirme o próximo número livre com `ls specs/` antes de criar
-o arquivo.
+**Nota sobre numeração de specs/prompts (2026-07-12, atualizada em 2026-07-13):** as Fases 5b/5c/5d
+(redesign visual + administração de usuários + tema Keycloakify do login) não estavam no plano original —
+foram inseridas depois de ver o resultado da Fase 5, e consumiram os números `specs/009`, `specs/010` e
+`specs/011` (esta última originalmente cotada para a Fase 6 unificada, mas usada pela 5d — ver spec
+`011-tema-keycloakify-login.md`). Isso significa que a Fase 6 (unificada) e a Fase 7 (renomeada) precisam
+ser numeradas a partir de `specs/012` — **não** `011`, que já existe e está fechado. Ao dar continuidade,
+confirme o próximo número livre com `ls specs/` antes de criar o arquivo.
 
 **Fase 6 unificada (2026-07-12, decisão do Pablo):** as antigas Fases 6 (testes/cobertura) e 7
 (concorrência aprofundada) foram fundidas em uma única Fase 6, simplificada, com a prova e2e de disputa
