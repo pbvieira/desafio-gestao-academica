@@ -75,6 +75,9 @@ jobs:
       - name: E2E fluxo de Matrícula (specs/006, secao 7 - D030)
         run: bash e2e/matricula-flow.sh
 
+      - name: E2E administracao de usuarios/papeis (specs/010)
+        run: bash e2e/administracao-papel-flow.sh
+
       - name: Diagnostico em caso de falha
         if: failure()
         run: |
