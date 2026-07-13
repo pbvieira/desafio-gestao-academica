@@ -151,4 +151,66 @@ class AdministracaoUsuarioServiceTest {
 				.isInstanceOf(RecursoNaoEncontradoException.class);
 	}
 
+	/**
+	 * Auditoria JaCoCo (specs/012, task 5): cobre o branch de reatribuirPapel() em que o
+	 * usuário-alvo não tem nenhum papel gerenciado atualmente (papeisAtuais.isEmpty() ==
+	 * true, linha 72 do service - antes desta task, só o ramo "usuário já tem papel" era
+	 * exercitado). Deve chamar apenas add(), nunca remove() com lista vazia.
+	 */
+	@Test
+	void reatribuirPapel_usuarioSemPapelAtual_naoChamaRemove() {
+		when(usersResource.get("kc-1")).thenReturn(userResource);
+		UserRepresentation representacao = new UserRepresentation();
+		representacao.setId("kc-1");
+		when(userResource.toRepresentation()).thenReturn(representacao);
+		when(userResource.roles()).thenReturn(roleMappingResource);
+		when(roleMappingResource.realmLevel()).thenReturn(roleScopeResource);
+		when(roleScopeResource.listAll()).thenReturn(List.of());
+		when(realmResource.roles()).thenReturn(rolesResource);
+		when(rolesResource.get("ADMIN")).thenReturn(roleResourceAdmin);
+		RoleRepresentation papelNovo = new RoleRepresentation();
+		papelNovo.setName("ADMIN");
+		when(roleResourceAdmin.toRepresentation()).thenReturn(papelNovo);
+
+		service.reatribuirPapel("kc-1", Papel.ADMIN);
+
+		verify(roleScopeResource, org.mockito.Mockito.never()).remove(org.mockito.ArgumentMatchers.anyList());
+		verify(roleScopeResource).add(List.of(papelNovo));
+	}
+
+	/**
+	 * Auditoria JaCoCo (specs/012, task 5): cobre o risco conhecido documentado em D048 -
+	 * reatribuirPapel() faz remove() e add() como duas chamadas separadas e não-atômicas à
+	 * Admin API do Keycloak. Antes desta task não havia teste forçando add() falhar depois
+	 * de remove() ter tido sucesso. Este teste não corrige o comportamento (aceito como
+	 * risco em D048, tela de baixo tráfego) - só documenta/trava o comportamento atual: a
+	 * exceção propaga (não é engolida) e remove() já foi efetivamente chamado antes da
+	 * falha, ou seja, o usuário-alvo fica sem papel gerenciado até nova tentativa manual.
+	 */
+	@Test
+	void reatribuirPapel_addFalhaAposRemoveSucesso_propagaExcecaoEUsuarioFicaSemPapel() {
+		when(usersResource.get("kc-1")).thenReturn(userResource);
+		UserRepresentation representacao = new UserRepresentation();
+		representacao.setId("kc-1");
+		when(userResource.toRepresentation()).thenReturn(representacao);
+		when(userResource.roles()).thenReturn(roleMappingResource);
+		when(roleMappingResource.realmLevel()).thenReturn(roleScopeResource);
+		RoleRepresentation papelAtual = new RoleRepresentation();
+		papelAtual.setName("ALUNO");
+		when(roleScopeResource.listAll()).thenReturn(List.of(papelAtual));
+		when(realmResource.roles()).thenReturn(rolesResource);
+		when(rolesResource.get("ADMIN")).thenReturn(roleResourceAdmin);
+		RoleRepresentation papelNovo = new RoleRepresentation();
+		papelNovo.setName("ADMIN");
+		when(roleResourceAdmin.toRepresentation()).thenReturn(papelNovo);
+		org.mockito.Mockito.doThrow(new jakarta.ws.rs.ProcessingException("falha de rede intermitente"))
+				.when(roleScopeResource).add(List.of(papelNovo));
+
+		assertThatThrownBy(() -> service.reatribuirPapel("kc-1", Papel.ADMIN))
+				.isInstanceOf(jakarta.ws.rs.ProcessingException.class);
+
+		verify(roleScopeResource).remove(List.of(papelAtual));
+		verify(roleScopeResource).add(List.of(papelNovo));
+	}
+
 }
