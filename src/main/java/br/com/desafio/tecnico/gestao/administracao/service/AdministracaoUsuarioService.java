@@ -1,6 +1,8 @@
 package br.com.desafio.tecnico.gestao.administracao.service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.keycloak.admin.client.Keycloak;
@@ -39,7 +41,21 @@ public class AdministracaoUsuarioService {
 	public List<UsuarioAdminDto> listarUsuarios() {
 		RealmResource realmResource = keycloakAdmin.realm(realm);
 		List<UserRepresentation> usuarios = realmResource.users().list();
-		return usuarios.stream().map(usuario -> paraDto(realmResource, usuario)).toList();
+		Map<String, String> papelPorUsuarioId = papelPorUsuarioId(realmResource);
+		return usuarios.stream().map(usuario -> paraDto(usuario, papelPorUsuarioId.get(usuario.getId()))).toList();
+	}
+
+	/**
+	 * D048: resolve o papel de todos os usuários listados com uma chamada por papel gerenciado
+	 * (O(3)) em vez de uma chamada adicional por usuário (N+1).
+	 */
+	private Map<String, String> papelPorUsuarioId(RealmResource realmResource) {
+		Map<String, String> papelPorUsuarioId = new HashMap<>();
+		for (String papel : PAPEIS_GERENCIADOS) {
+			List<UserRepresentation> membros = realmResource.roles().get(papel).getUserMembers();
+			membros.forEach(membro -> papelPorUsuarioId.put(membro.getId(), papel));
+		}
+		return papelPorUsuarioId;
 	}
 
 	public void reatribuirPapel(String usuarioId, Papel novoPapel) {
@@ -66,10 +82,7 @@ public class AdministracaoUsuarioService {
 		return usuario;
 	}
 
-	private UsuarioAdminDto paraDto(RealmResource realmResource, UserRepresentation usuario) {
-		List<RoleRepresentation> papeis = realmResource.users().get(usuario.getId()).roles().realmLevel().listAll();
-		String papel = papeis.stream().map(RoleRepresentation::getName).filter(PAPEIS_GERENCIADOS::contains)
-				.findFirst().orElse(null);
+	private UsuarioAdminDto paraDto(UserRepresentation usuario, String papel) {
 		String nome = ((usuario.getFirstName() != null ? usuario.getFirstName() : "") + " "
 				+ (usuario.getLastName() != null ? usuario.getLastName() : "")).trim();
 		return new UsuarioAdminDto(usuario.getId(), usuario.getUsername(), nome, usuario.getEmail(), papel);

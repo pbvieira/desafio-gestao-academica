@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.RoleMappingResource;
+import org.keycloak.admin.client.resource.RoleResource;
 import org.keycloak.admin.client.resource.RoleScopeResource;
 import org.keycloak.admin.client.resource.RolesResource;
 import org.keycloak.admin.client.resource.UserResource;
@@ -22,8 +23,6 @@ import br.com.desafio.tecnico.gestao.errorhandling.RecursoNaoEncontradoException
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +45,12 @@ class AdministracaoUsuarioServiceTest {
 	private RoleScopeResource roleScopeResource;
 	@Mock
 	private RolesResource rolesResource;
+	@Mock
+	private RoleResource roleResourceAluno;
+	@Mock
+	private RoleResource roleResourceSecretaria;
+	@Mock
+	private RoleResource roleResourceAdmin;
 
 	private AdministracaoUsuarioService service;
 
@@ -54,6 +59,21 @@ class AdministracaoUsuarioServiceTest {
 		service = new AdministracaoUsuarioService(keycloak, REALM);
 		when(keycloak.realm(REALM)).thenReturn(realmResource);
 		when(realmResource.users()).thenReturn(usersResource);
+	}
+
+	/**
+	 * D048: listarUsuarios() resolve papel via membros das 3 roles gerenciadas
+	 * (getUserMembers(), O(3)), não mais uma chamada de roles por usuário (N+1).
+	 * Por padrão nenhuma role tem membros - os testes sobrescrevem a role relevante.
+	 */
+	private void configurarRolesGerenciadasSemMembros() {
+		when(realmResource.roles()).thenReturn(rolesResource);
+		when(rolesResource.get("ALUNO")).thenReturn(roleResourceAluno);
+		when(rolesResource.get("SECRETARIA")).thenReturn(roleResourceSecretaria);
+		when(rolesResource.get("ADMIN")).thenReturn(roleResourceAdmin);
+		when(roleResourceAluno.getUserMembers()).thenReturn(List.of());
+		when(roleResourceSecretaria.getUserMembers()).thenReturn(List.of());
+		when(roleResourceAdmin.getUserMembers()).thenReturn(List.of());
 	}
 
 	@Test
@@ -65,12 +85,8 @@ class AdministracaoUsuarioServiceTest {
 		representacao.setLastName("Teste");
 		representacao.setEmail("aluno.teste@gestao.local");
 		when(usersResource.list()).thenReturn(List.of(representacao));
-		when(usersResource.get("kc-1")).thenReturn(userResource);
-		when(userResource.roles()).thenReturn(roleMappingResource);
-		when(roleMappingResource.realmLevel()).thenReturn(roleScopeResource);
-		RoleRepresentation papelAluno = new RoleRepresentation();
-		papelAluno.setName("ALUNO");
-		when(roleScopeResource.listAll()).thenReturn(List.of(papelAluno));
+		configurarRolesGerenciadasSemMembros();
+		when(roleResourceAluno.getUserMembers()).thenReturn(List.of(representacao));
 
 		List<UsuarioAdminDto> usuarios = service.listarUsuarios();
 
@@ -81,6 +97,25 @@ class AdministracaoUsuarioServiceTest {
 		assertThat(usuario.nome()).isEqualTo("Aluno Teste");
 		assertThat(usuario.email()).isEqualTo("aluno.teste@gestao.local");
 		assertThat(usuario.papel()).isEqualTo("ALUNO");
+	}
+
+	@Test
+	void listarUsuarios_usuarioSemPapelGerenciado_papelNulo() {
+		UserRepresentation representacao = new UserRepresentation();
+		representacao.setId("kc-2");
+		representacao.setUsername("sem.papel");
+		representacao.setFirstName("Sem");
+		representacao.setLastName("Papel");
+		representacao.setEmail("sem.papel@gestao.local");
+		when(usersResource.list()).thenReturn(List.of(representacao));
+		configurarRolesGerenciadasSemMembros();
+
+		List<UsuarioAdminDto> usuarios = service.listarUsuarios();
+
+		assertThat(usuarios).hasSize(1);
+		UsuarioAdminDto usuario = usuarios.get(0);
+		assertThat(usuario.id()).isEqualTo("kc-2");
+		assertThat(usuario.papel()).isNull();
 	}
 
 	@Test
@@ -95,12 +130,10 @@ class AdministracaoUsuarioServiceTest {
 		papelAtual.setName("ALUNO");
 		when(roleScopeResource.listAll()).thenReturn(List.of(papelAtual));
 		when(realmResource.roles()).thenReturn(rolesResource);
-		org.keycloak.admin.client.resource.RoleResource roleResource =
-				org.mockito.Mockito.mock(org.keycloak.admin.client.resource.RoleResource.class);
-		when(rolesResource.get("ADMIN")).thenReturn(roleResource);
+		when(rolesResource.get("ADMIN")).thenReturn(roleResourceAdmin);
 		RoleRepresentation papelNovo = new RoleRepresentation();
 		papelNovo.setName("ADMIN");
-		when(roleResource.toRepresentation()).thenReturn(papelNovo);
+		when(roleResourceAdmin.toRepresentation()).thenReturn(papelNovo);
 
 		service.reatribuirPapel("kc-1", Papel.ADMIN);
 
