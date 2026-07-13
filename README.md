@@ -176,8 +176,11 @@ nenhum passo manual na UI) a partir de `docker/keycloak/import/gestao-realm.json
 
 - **Papéis (realm roles):** `ALUNO`, `SECRETARIA`, `ADMIN` (D011).
 - **Clients:** `gestao-frontend` (público, Authorization Code + PKCE, usado pelo Angular) e
-  `gestao-backend` (confidential, secret via `KEYCLOAK_BACKEND_CLIENT_SECRET`, sem consumidor de código
-  ainda — D013).
+  `gestao-backend` (confidential, secret via `KEYCLOAK_BACKEND_CLIENT_SECRET`). Este último tem um
+  consumidor de código real desde a spec 010: `AdministracaoUsuarioService` autentica na Admin API do
+  Keycloak via `client_credentials` (`serviceAccountsEnabled: true` + client roles `view-users`/
+  `manage-users`/`query-users`/`view-realm` de `realm-management` atribuídas ao seu service account,
+  `docker/keycloak/import/gestao-realm.json` — ver `docs/DECISIONS.md`, D045/D046).
 
 **Usuários de teste** (credenciais de desenvolvimento, válidas só neste Keycloak local — nunca usar fora
 deste ambiente):
@@ -186,7 +189,7 @@ deste ambiente):
 |---|---|---|---|
 | `aluno.teste` | `aluno123` | `ALUNO` | Ver/editar o próprio perfil (`GET /api/alunos/me`, D041), ver turmas disponíveis, matricular-se, ver e cancelar as próprias matrículas |
 | `secretaria.teste` | `secretaria123` | `SECRETARIA` | CRUD completo de Aluno/Curso/Disciplina/Turma, confirmar matrícula de qualquer aluno |
-| `admin.teste` | `admin123` | `ADMIN` | Mesmo acesso de `SECRETARIA` hoje — o backend não distingue os dois papéis em nenhuma regra ainda (D011) |
+| `admin.teste` | `admin123` | `ADMIN` | Mesmo acesso de `SECRETARIA` + administração de usuários/papéis via `/administracao/usuarios` — única regra que hoje distingue ADMIN de SECRETARIA no backend (D045) |
 
 Para obter um token manualmente (ex: testar a API via `curl`), o client `gestao-frontend` tem
 `directAccessGrantsEnabled: true` (grant de senha direta), usado pelo próprio `e2e/matricula-flow.sh`:
@@ -196,6 +199,28 @@ curl -s -X POST "http://localhost:${KEYCLOAK_HTTP_PORT:-8081}/realms/gestao/prot
   -d "client_id=gestao-frontend" -d "grant_type=password" \
   -d "username=aluno.teste" -d "password=aluno123" | jq -r .access_token
 ```
+
+### Administração de usuários/papéis
+
+Tela em `/administracao/usuarios` (só visível/acessível a `ADMIN`, item de sidebar próprio — ver
+`specs/010-administracao-usuarios-papeis.md`): lista os usuários do realm `gestao` com papel atual e
+permite reatribuir o papel (`ALUNO`/`SECRETARIA`/`ADMIN`) de um usuário já existente via `<select>` inline
+por linha, sem tela de formulário separada. Esta é a primeira e única regra do sistema que hoje diferencia
+`ADMIN` de `SECRETARIA` (D045).
+
+O backend fala com a **Admin API do Keycloak** via `client_credentials`, usando o client confidential
+`gestao-backend` (`org.keycloak:keycloak-admin-client`, SDK oficial — `KeycloakAdminConfig`,
+`AdministracaoUsuarioService`). Isso exige, no client `gestao-backend` do realm `gestao`:
+
+- `"serviceAccountsEnabled": true`;
+- os client roles `view-users`, `manage-users`, `query-users` e `view-realm` de `realm-management`
+  atribuídos ao service account desse client.
+
+Ambos já vêm configurados em `docker/keycloak/import/gestao-realm.json` (importado automaticamente ao
+subir o Keycloak — nenhum passo manual necessário no ambiente local do `compose.yaml`; ver
+`docs/DECISIONS.md`, D045/D046). **Sem essa configuração, `GET /api/admin/usuarios` responde 500**
+(`ForbiddenException` da Admin API do Keycloak ao consultar membros de role) — se for reproduzir este
+realm do zero fora do `compose.yaml`, confira esse role mapping do service account antes de tudo.
 
 ## Documentação
 

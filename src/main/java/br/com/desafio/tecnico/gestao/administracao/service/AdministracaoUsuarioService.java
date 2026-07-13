@@ -12,6 +12,8 @@ import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +29,7 @@ import br.com.desafio.tecnico.gestao.errorhandling.RecursoNaoEncontradoException
 @Service
 public class AdministracaoUsuarioService {
 
+	private static final Logger log = LoggerFactory.getLogger(AdministracaoUsuarioService.class);
 	private static final Set<String> PAPEIS_GERENCIADOS = Set.of("ALUNO", "SECRETARIA", "ADMIN");
 
 	private final Keycloak keycloakAdmin;
@@ -65,11 +68,16 @@ public class AdministracaoUsuarioService {
 		RoleScopeResource papeisDoUsuario = usuario.roles().realmLevel();
 		List<RoleRepresentation> papeisAtuais = papeisDoUsuario.listAll().stream()
 				.filter(papel -> PAPEIS_GERENCIADOS.contains(papel.getName())).toList();
+		String papelAnterior = papeisAtuais.stream().map(RoleRepresentation::getName).findFirst().orElse(null);
 		if (!papeisAtuais.isEmpty()) {
 			papeisDoUsuario.remove(papeisAtuais);
 		}
 		RoleRepresentation novoPapelRepresentacao = realmResource.roles().get(novoPapel.name()).toRepresentation();
 		papeisDoUsuario.add(List.of(novoPapelRepresentacao));
+		// specs/010, seção 8: rastreabilidade mínima da reatribuição - "quem" (ADMIN autenticado)
+		// fica implícito no log de acesso HTTP já existente (correlation/trace ID), não repetido aqui.
+		log.info("Papel reatribuído - usuario={}, papelAnterior={}, papelNovo={}", usuarioId, papelAnterior,
+				novoPapel);
 	}
 
 	private UserResource buscarUsuario(UsersResource usersResource, String usuarioId) {

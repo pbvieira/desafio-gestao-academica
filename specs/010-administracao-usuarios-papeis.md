@@ -46,12 +46,12 @@ como algo a revisitar quando surgisse uma regra real).
 Não há regra do PRD §02 envolvida (isso é uma funcionalidade administrativa além do PRD). Regras novas,
 introduzidas por esta spec:
 
-- [ ] Só um usuário autenticado com papel ADMIN pode listar usuários ou reatribuir papel — qualquer outro
+- [x] Só um usuário autenticado com papel ADMIN pode listar usuários ou reatribuir papel — qualquer outro
   papel recebe 403.
-- [ ] O papel enviado no `PATCH` precisa ser exatamente um de `ALUNO`/`SECRETARIA`/`ADMIN` — qualquer outro
+- [x] O papel enviado no `PATCH` precisa ser exatamente um de `ALUNO`/`SECRETARIA`/`ADMIN` — qualquer outro
   valor é 400.
-- [ ] Reatribuir papel a um `id` de usuário que não existe no Keycloak retorna 404.
-- [ ] Um ADMIN pode reatribuir o próprio papel (não há proteção especial contra "auto-rebaixamento" nesta
+- [x] Reatribuir papel a um `id` de usuário que não existe no Keycloak retorna 404.
+- [x] Um ADMIN pode reatribuir o próprio papel (não há proteção especial contra "auto-rebaixamento" nesta
   fase — risco aceito, ver seção 8).
 
 ## 4. Abordagem técnica
@@ -91,13 +91,13 @@ demais componentes de listagem).
 
 ## 6. Critérios de aceite
 
-- [ ] ADMIN autenticado vê a lista de usuários do realm `gestao` com papel atual de cada um.
-- [ ] ADMIN reatribui o papel de um usuário e a mudança é refletida no Keycloak (confirmável via console
+- [x] ADMIN autenticado vê a lista de usuários do realm `gestao` com papel atual de cada um.
+- [x] ADMIN reatribui o papel de um usuário e a mudança é refletida no Keycloak (confirmável via console
   admin do Keycloak ou via novo login desse usuário obtendo um token com o novo papel).
-- [ ] SECRETARIA/ALUNO recebem 403 ao tentar acessar `GET/PATCH /api/admin/usuarios*` (backend) e não veem
+- [x] SECRETARIA/ALUNO recebem 403 ao tentar acessar `GET/PATCH /api/admin/usuarios*` (backend) e não veem
   a rota/seção "Administração" na sidebar (frontend).
-- [ ] Papel inválido no `PATCH` retorna 400 com `ProblemDetail`; `id` inexistente retorna 404.
-- [ ] Erros de rede/API tratados na tela (mesmo padrão `erroGeral`/`carregando` dos demais componentes).
+- [x] Papel inválido no `PATCH` retorna 400 com `ProblemDetail`; `id` inexistente retorna 404.
+- [x] Erros de rede/API tratados na tela (mesmo padrão `erroGeral`/`carregando` dos demais componentes).
 
 ## 7. Plano de testes
 
@@ -117,9 +117,14 @@ custo de manter um segundo mecanismo de integração (Testcontainers-Keycloak) s
 
 ## 8. Impacto em observabilidade / segurança
 
-- **Logs/observabilidade:** log estruturado (nível INFO) a cada reatribuição de papel — quem (ADMIN),
-  para quem (id do usuário-alvo), de qual papel para qual papel — não há trilha de auditoria persistida
-  nesta fase (fora de escopo, seção 2), mas o log estruturado dá rastreabilidade mínima.
+- **Logs/observabilidade:** `AdministracaoUsuarioService.reatribuirPapel()` loga em nível INFO, a cada
+  reatribuição, o usuário-alvo (id), o papel anterior e o novo papel. "Quem" (o ADMIN autenticado que fez a
+  chamada) não é logado explicitamente aqui — o service não tem acesso ao `Authentication` da requisição —
+  mas fica implícito no log de acesso HTTP já existente da requisição `PATCH`, correlacionável pelo
+  `traceId`/correlation ID já presente em todo log estruturado da aplicação (ver seção "Observabilidade" do
+  README). Não há trilha de auditoria persistida nesta fase (fora de escopo, seção 2); este log estruturado
+  dá a rastreabilidade mínima prometida, ajustada ao que o código efetivamente cobre (achado da revisão
+  final de branch, 2026-07-13).
 - **Segurança:** endpoint sensível por natureza (concede/revoga privilégio) — `@PreAuthorize` ADMIN-only
   na classe inteira, sem excecão. **Risco aceito, não mitigado nesta fase:** um ADMIN pode reatribuir o
   próprio papel (ex: se rebaixar acidentalmente, ou outro ADMIN rebaixar todos os demais ADMINs) — sem
@@ -130,14 +135,14 @@ custo de manter um segundo mecanismo de integração (Testcontainers-Keycloak) s
 
 ## 9. Definition of Done desta tarefa
 
-- [ ] Critérios de aceite (seção 6) atendidos
-- [ ] Testes da seção 7 implementados e passando
-- [ ] Cobertura ≥ 80% no módulo `administracao`, com sentido (ver CLAUDE.md item 5)
-- [ ] `docs/DECISIONS.md` atualizado com D045 e D046
-- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados
-- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados (atenção
+- [x] Critérios de aceite (seção 6) atendidos
+- [x] Testes da seção 7 implementados e passando
+- [x] Cobertura ≥ 80% no módulo `administracao`, com sentido (ver CLAUDE.md item 5)
+- [x] `docs/DECISIONS.md` atualizado com D045 e D046
+- [x] `code-reviewer` executado — achados endereçados ou justificadamente descartados
+- [x] `security-auditor` executado — achados endereçados ou justificadamente descartados (atenção
   especial ao risco de auto-rebaixamento descrito na seção 8)
-- [ ] Esta spec atualizada para refletir o que foi de fato implementado
-- [ ] `./mvnw clean verify` passando
-- [ ] README atualizado — nova seção descrevendo a tela de administração e o requisito de
+- [x] Esta spec atualizada para refletir o que foi de fato implementado
+- [x] `./mvnw clean verify` passando
+- [x] README atualizado — nova seção descrevendo a tela de administração e o requisito de
   `serviceAccountsEnabled` no `gestao-backend`

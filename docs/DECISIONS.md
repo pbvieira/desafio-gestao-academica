@@ -1975,5 +1975,11 @@ os parâmetros certos (a implementação precisa confirmar que a API retorna tod
 paginação implícita, dado o volume pequeno esperado no realm local/de teste).
 **Riscos conhecidos / o que revisitar se o contexto mudar:** se o Keycloak passar a impor paginação
 obrigatória em `getUserMembers()` para realms grandes, revisitar a estratégia (ex: paginação explícita ou
-cache local do mapeamento papel→usuários).
+cache local do mapeamento papel→usuários). Adicionalmente (achado da revisão final de branch,
+2026-07-13): `AdministracaoUsuarioService.reatribuirPapel()` remove o(s) papel(is) atual(is) do usuário
+antes de adicionar o novo (duas chamadas separadas à Admin API do Keycloak, sem transação distribuída) —
+se `add()` falhar após `remove()` ter tido sucesso (ex: falha de rede intermitente entre as duas
+chamadas), o usuário-alvo fica temporariamente sem nenhum papel gerenciado. Aceito como está, dado o
+baixo tráfego da tela (uso administrativo pontual, não um fluxo de usuário final) — documentado aqui para
+não ser redescoberto como "bug" depois; não há retry automático nem compensação implementados.
 
