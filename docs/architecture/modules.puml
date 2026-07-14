@@ -1,0 +1,26 @@
+@startuml
+set separator none
+title GestaoApplication
+
+top to bottom direction
+
+!include <C4/C4>
+!include <C4/C4_Context>
+!include <C4/C4_Component>
+
+Container_Boundary("GestaoApplication.GestaoApplication_boundary", "GestaoApplication", $tags="") {
+  Component(GestaoApplication.GestaoApplication.Errorhandling, "Errorhandling", $techn="Module", $descr="", $tags="", $link="")
+  Component(GestaoApplication.GestaoApplication.Academico, "Academico", $techn="Module", $descr="", $tags="", $link="")
+  Component(GestaoApplication.GestaoApplication.Administracao, "Administracao", $techn="Module", $descr="", $tags="", $link="")
+  Component(GestaoApplication.GestaoApplication.Notificacao, "Notificacao", $techn="Module", $descr="", $tags="", $link="")
+  Component(GestaoApplication.GestaoApplication.Security, "Security", $techn="Module", $descr="", $tags="", $link="")
+}
+
+Rel(GestaoApplication.GestaoApplication.Administracao, GestaoApplication.GestaoApplication.Errorhandling, "depends on", $techn="", $tags="", $link="")
+Rel(GestaoApplication.GestaoApplication.Security, GestaoApplication.GestaoApplication.Errorhandling, "depends on", $techn="", $tags="", $link="")
+Rel(GestaoApplication.GestaoApplication.Security, GestaoApplication.GestaoApplication.Academico, "uses", $techn="", $tags="", $link="")
+Rel(GestaoApplication.GestaoApplication.Notificacao, GestaoApplication.GestaoApplication.Academico, "depends on", $techn="", $tags="", $link="")
+Rel(GestaoApplication.GestaoApplication.Academico, GestaoApplication.GestaoApplication.Errorhandling, "depends on", $techn="", $tags="", $link="")
+
+SHOW_LEGEND(true)
+@enduml
