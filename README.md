@@ -390,3 +390,48 @@ inclusive quais foram sugestões da IA aceitas sem alteração vs. decisões ati
 está registrada em `docs/DECISIONS.md`, com a origem de cada uma classificada
 explicitamente. Achados de `code-reviewer`/`security-auditor` (também via IA) que geraram
 mudança de implementação estão documentados nas specs correspondentes em `specs/`.
+
+**Contagem por origem** (60 entradas em `docs/DECISIONS.md`, contadas via
+`grep -c '^\*\*Origem:\*\*'`):
+
+- 🧑 18 decisões ativas do Pablo (a IA não decidiu, só executou ou apresentou alternativas).
+- 🤝 10 sugestões da IA revisadas/ajustadas pelo Pablo antes de aceitas.
+- 🤖 31 defaults da IA aceitos sem alteração.
+- 1 entrada de origem mista (D047, tema com vários pontos de decisão independentes — origem
+  registrada ponto a ponto dentro da própria entrada).
+
+`docs/DECISIONS.md` continua sendo a fonte primária e granular — a lista abaixo não a substitui,
+apenas aponta, para quem for revisar rápido, os trechos com maior peso técnico e que passaram por
+revisão manual mais próxima (não só "gerado e aceito"):
+
+1. **Proteção do limite de vagas sob concorrência** ([D024](docs/DECISIONS.md#d024),
+   [D053](docs/DECISIONS.md#d053)) — a estratégia (`UPDATE` condicional atômico + `@Version`, PRD
+   §06, critério eliminatório) só foi fechada depois que o Pablo pediu prova real em vez de aceitar
+   a recomendação de cara ("quero uma solução robusta de mercado"); D053 registra a comparação
+   empírica final (e2e com 20 alunos disputando a última vaga, 20/20 execuções corretas, e
+   comparação numérica atômico vs. lock pessimista) que confirmou manter a estratégia atômica.
+2. **Propagação de trace ID até o consumidor da fila** ([D034](docs/DECISIONS.md#d034)) — a
+   opção recomendada inicialmente (suporte nativo do Spring Boot/AMQP via Observation) e o
+   fallback cogitado (`MessagePostProcessor` manual) foram os dois testados contra a aplicação
+   real e os dois falharam (a publicação do Modulith roda em thread própria, fora do `ThreadLocal`
+   de span da requisição HTTP); o mecanismo final (capturar o `traceId` na thread da requisição e
+   propagá-lo no próprio payload do evento) só existe por causa dessa verificação empírica.
+3. **TOCTOU nas checagens de unicidade sob concorrência** ([D031](docs/DECISIONS.md#d031), item 1)
+   — achado conjunto de `code-reviewer` (Médio-Alto) e `security-auditor` (Médio): duas
+   requisições concorrentes podiam ambas passar a checagem `existsBy...` e uma violar a
+   constraint de unicidade no banco, degradando para 500 em vez de 409; corrigido com um handler
+   global (`DataIntegrityViolationException` → 409) antes de a spec ser considerada concluída.
+4. **Bug latente de credenciais RabbitMQ em 6 classes de teste** ([D059](docs/DECISIONS.md#d059))
+   — encontrado rodando o gate final (`./mvnw clean verify` em ambiente novo): ao isolar o Postgres
+   via `PostgreSQLContainer`, as 6 classes desligavam `spring.docker.compose.enabled` por inteiro,
+   derrubando também a autodescoberta do RabbitMQ e fazendo o client cair no default `guest/guest`.
+   Escalado ao Pablo antes de corrigir (não corrigido silenciosamente); corrigido espelhando o
+   padrão de `RabbitMQContainer` já usado em outras duas classes do projeto.
+5. **Dropdown de papel sempre exibindo "ALUNO" na tela de administração** (commits `9a31930`
+   fix e `c1e7ec6` recaptura — bug de UI sem alternativa de design real, por isso fora de
+   `DECISIONS.md`) — encontrado só porque um agente abriu e olhou o screenshot capturado como
+   evidência em vez de confiar num log de "OK" de script; confirmado com um teste de componente
+   descartável, escalado ao Pablo antes de corrigir, e corrigido com TDD
+   (`usuarios-lista.component.spec.ts` RED → GREEN) trocando `[value]` no `<select>` por
+   `[selected]` em cada `<option>` (o valor era aplicado antes das `<option>` filhas renderizarem
+   via `@for`, então o browser sempre caía na primeira).
