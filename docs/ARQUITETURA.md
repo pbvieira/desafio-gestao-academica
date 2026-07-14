@@ -158,6 +158,31 @@ sequenceDiagram
 | Topologia RabbitMQ (exchange/filas/DLQ) | `config/MensageriaConfig.java` |
 | Consumidor + idempotência | `notificacao/MatriculaNotificacaoListener.java`, tabela `evento_processado` (V9) |
 
+**Evidência concreta:** consulta real contra a tabela `event_publication` do Postgres da aplicação (via
+`docker exec -i gestao-educacao-postgres-1 psql -U myuser -d mydatabase`), logo após uma disputa de vaga
+real disparada em ambiente local:
+
+```
+                         event_type                          | completa
+-------------------------------------------------------------+----------
+ br.com.desafio.tecnico.gestao.academico.MatriculaConfirmada | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaConfirmada | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaConfirmada | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+ br.com.desafio.tecnico.gestao.academico.MatriculaCriada     | t
+(10 rows)
+```
+
+Os 10 eventos de domínio mais recentes (`MatriculaCriada`/`MatriculaConfirmada`) aparecem com
+`completa = t` — prova concreta de que a linha do outbox foi gravada na mesma transação do domínio e,
+depois, marcada como entregue (`completion_date` preenchido) pelo `spring-modulith-events-amqp`, não uma
+inferência a partir só do código.
+
 **O que se ganha "de graça" vs. um outbox artesanal:** zero código de dispatcher/relay, reentrega
 automática após restart, sem tabela nem lógica de retry escritas à mão. **Limitações aceitas:** reenvio só
 acontece no restart da aplicação (não é um relay contínuo tipo Debezium/CDC monitorando a tabela em tempo

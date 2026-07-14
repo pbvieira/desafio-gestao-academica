@@ -103,6 +103,12 @@ Os outros quatro painéis (heap, requisições HTTP/s, uptime, CPU) são infraes
 Depois, vale abrir o **Explore** apontando para o datasource Loki para ver logs ao vivo e testar o link
 para o Jaeger via `derivedFields`.
 
+![Dashboard "Gestão - JVM & HTTP (básico)" no Grafana](images/grafana-dashboard.png)
+
+Evidência do dashboard provisionado renderizando dado real, não vazio: heap da JVM, requisições HTTP/s por
+endpoint, uptime, CPU% e, no painel 5, o `matricula.vaga.conflito` com valores não-zero coletados de uma
+disputa de vaga disparada de propósito.
+
 ---
 
 ## Loki
@@ -182,6 +188,13 @@ quanto para resolver os links gerados pelo `derivedFields` do Loki.
 `POST /api/matriculas/{id}/confirmar` — esse é o fluxo mais ilustrativo porque mostra a árvore completa de
 spans: a camada HTTP (controller), a camada de domínio/serviço (onde a regra de vaga é avaliada) e a
 publicação do evento de domínio via Spring Modulith.
+
+![Trace expandido de POST /api/matriculas/{id}/confirmar no Jaeger](images/jaeger-trace-matricula.png)
+
+Evidência de um trace real (não a tela de busca/comparação) para `POST /api/matriculas/{id}/confirmar`,
+expandido: 7 spans, 7,11ms de duração, profundidade 3 (filterchain de segurança → autenticação do bearer
+token → autorização de request/method → requisição segura) — mostra o tracing distribuído funcionando de
+ponta a ponta na requisição síncrona.
 
 ---
 

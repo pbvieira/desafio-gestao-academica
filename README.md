@@ -85,6 +85,11 @@ npm test            # testes unitários dos services (Karma/Jasmine)
 npm run build       # build de produção em frontend/dist/
 ```
 
+![Fluxo de matrícula no Angular, logado como aluno.teste](docs/images/matricula-fluxo-angular.png)
+
+Evidência do frontend consumindo a API real: tela "Turmas" logada como `aluno.teste`, mostrando as turmas
+abertas disponíveis e a confirmação de uma matrícula recém-criada — não um mock estático.
+
 **Configuração de ambiente:** `frontend/src/environments/environment.ts` define para onde o frontend
 aponta — não precisa de `.env` próprio, mas precisa estar alinhado com o backend/Keycloak locais:
 
@@ -147,6 +152,12 @@ Java 21, Spring Boot 3.5, Spring Modulith, Spring Security (OAuth2 Resource Serv
 PostgreSQL + Flyway, Redis, RabbitMQ, Keycloak, Prometheus + Grafana + Jaeger + Loki
 (observabilidade), JaCoCo. Ver `pom.xml` e `CLAUDE.md` para a lista completa.
 
+![Swagger UI com todos os grupos de recursos da API](docs/images/swagger-ui.png)
+
+Evidência de que a documentação OpenAPI 3.1 (`springdoc-openapi-starter-webmvc-ui`) está de fato servida
+em `/swagger-ui.html` e cobre todos os grupos de recursos da API (Turmas, Disciplinas, Cursos, Alunos,
+Matrículas, Administração, etc.), não só os endpoints principais.
+
 ## Mensageria assíncrona (RabbitMQ)
 
 Eventos de domínio de Matrícula (`MatriculaCriada`/`Confirmada`/`Cancelada`) são publicados
@@ -170,6 +181,12 @@ mostra mensagens que esgotaram as tentativas — é possível inspecionar o payl
 message**, mesmo exchange `gestao.eventos` e routing key original) para forçar um novo
 processamento; a idempotência (`evento_processado`) garante que isso não duplica o efeito
 se a mensagem já tiver sido processada com sucesso antes de cair na DLQ.
+
+![RabbitMQ Management UI mostrando as 3 filas de notificação](docs/images/rabbitmq-management-filas-dlq.png)
+
+Evidência de que a topologia de retry/DLQ descrita acima existe de fato no broker, não só no código: as
+três filas `notificacao.matricula`, `notificacao.matricula.retry` (TTL) e `notificacao.matricula.dlq`,
+todas no estado `running`.
 
 **Rastreabilidade (trace ID):** o `traceId` da requisição HTTP original que disparou o evento viaja no
 próprio payload do evento (ao lado do `eventId` usado para idempotência) e aparece no log estruturado do
@@ -207,6 +224,27 @@ Repetido 10x consecutivas, duas vezes (20 execuções no total): em **todas** o 
 exatamente **1×200 (sucesso) e 19×409 com `errorCode: VAGAS_ESGOTADAS`**, sem nenhuma
 exceção não tratada, timeout ou resultado ambíguo — ver como rodar em "Como rodar os
 testes" acima, e a decisão registrada em `docs/DECISIONS.md` (D053).
+
+Saída real e completa de uma dessas execuções (`npx playwright test --repeat-each=10`, 10 repetições
+consecutivas do mesmo cenário — 20 alunos disputando 1 vaga, `Promise.all` sem await sequencial):
+
+```
+Running 10 tests using 1 worker
+
+  ✓   1 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (1.2s)
+  ✓   2 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (1.0s)
+  ✓   3 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (937ms)
+  ✓   4 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (880ms)
+  ✓   5 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (846ms)
+  ✓   6 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (822ms)
+  ✓   7 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (861ms)
+  ✓   8 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (761ms)
+  ✓   9 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (811ms)
+  ✓  10 tests/matricula-concorrencia-20-alunos.spec.ts:102:5 › disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 19 recebem 409 VAGAS_ESGOTADAS (698ms)
+
+  10 passed (12.4s)
+EXIT=0
+```
 
 **Por que `UPDATE` atômico em vez de lock pessimista:** uma comparação numérica separada,
 a nível de JVM/repository (N=10 threads disputando 1 vaga, `src/test/java/.../academico/
@@ -288,6 +326,13 @@ permite reatribuir o papel (`ALUNO`/`SECRETARIA`/`ADMIN`) de um usuário já exi
 por linha, sem tela de formulário separada. Esta é a primeira e única regra do sistema que hoje diferencia
 `ADMIN` de `SECRETARIA` (D045).
 
+![Tela de administração de usuários e papéis, logado como admin.teste](docs/images/admin-usuarios-papeis.png)
+
+Evidência da tela funcionando com os 3 papéis distintos: os 3 usuários de teste listados com seu papel
+atual correto nos `<select>` de reatribuição (`aluno.teste`→`ALUNO`, `admin.teste`→`ADMIN`,
+`secretaria.teste`→`SECRETARIA`), confirmando que a tela lê o papel real de cada usuário via Admin API do
+Keycloak, não um valor default estático.
+
 O backend fala com a **Admin API do Keycloak** via `client_credentials`, usando o client confidential
 `gestao-backend` (`org.keycloak:keycloak-admin-client`, SDK oficial — `KeycloakAdminConfig`,
 `AdministracaoUsuarioService`). Isso exige, no client `gestao-backend` do realm `gestao`:
@@ -316,6 +361,12 @@ Isso cria `keycloak-theme/dist_keycloak/keycloak-theme.jar`, montado automaticam
 tema padrão (o volume simplesmente fica vazio). Como este `compose.yaml` não mantém volume persistente
 para o Postgres do Keycloak, um `docker compose down && docker compose up` sempre reimporta o realm do
 zero — não há passo manual adicional para o `loginTheme` ser aplicado.
+
+![Tela de login do Keycloak com o tema Gestão Acadêmica](docs/images/login-keycloak.png)
+
+Evidência do tema Keycloakify aplicado de fato (não o tema padrão do Keycloak): a tela de login em
+`http://localhost:8081/realms/gestao/...` já renderiza com a identidade visual "Gestão Acadêmica" descrita
+acima, para o fluxo OAuth2 do client `gestao-frontend`.
 
 ## Documentação
 
