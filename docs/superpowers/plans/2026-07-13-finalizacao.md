@@ -477,6 +477,152 @@ git commit -m "docs: preenche checklist literal do PRD com evidencia (specs/013)
 
 ---
 
+### Task 5b: Dockerizar a aplicação (D057 — inserida após achado da Task 5, antes do gate final)
+
+**Contexto:** a Task 5 encontrou que `compose.yaml` nunca sobe a própria aplicação (roda via `./mvnw
+spring-boot:run` no host, D003) — o PRD pede isso 3x no texto. Escalado ao Pablo, que confirmou dockerizar
+agora (D057) em vez de só documentar como trade-off aceito. Esta task fecha essa lacuna, sem alterar
+nenhuma regra de negócio.
+
+**Risco técnico central, já mapeado — leia antes de implementar:** `application.properties:40` tem
+`spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:${KEYCLOAK_HTTP_PORT:8081}/realms/gestao`.
+Se o container da app usar rede em bridge (padrão do Docker Compose), `localhost` dentro do container
+deixa de apontar para o host — a validação de token (`iss` claim) quebraria silenciosamente. **Solução
+recomendada: `network_mode: host` no serviço da app no compose.yaml** — o container passa a enxergar
+`localhost:5432`/`localhost:8081`/`localhost:5672` exatamente como o processo local já faz hoje via
+`./mvnw spring-boot:run`, sem precisar mudar nenhuma property de `application.properties`. Funciona em
+Linux (ambiente de desenvolvimento deste projeto); não precisa se preocupar com Docker Desktop
+Mac/Windows para este desafio. Consequência: o serviço da app NÃO reserva porta própria via `ports:`
+(rede compartilhada com o host já expõe `:8080` diretamente).
+
+**Files:**
+- Create: `Dockerfile` (raiz do repo)
+- Modify: `compose.yaml` (novo serviço `app`)
+- Modify: `README.md` (nova opção "subir tudo via compose, incl. a app" na seção `## Como rodar
+  localmente`, sem remover a opção existente de `./mvnw spring-boot:run` — as duas continuam válidas)
+- Modify: `specs/013-finalizacao.md` (marcar o item de Docker Compose do PRD §04, deixado `[ ]` pela Task
+  5, como `[x]` com a evidência desta task)
+
+**Interfaces:**
+- Consumes: `pom.xml` (Java 21, `spring-boot-maven-plugin`, jar padrão em `target/*.jar`).
+- Produces: imagem Docker da aplicação, consumida pela Task 6 (gate e2e — validar se roda contra a app
+  containerizada ou a app local é aceitável; decidir na hora, ambas são formas válidas de "ambiente no
+  ar", mas rode pelo menos uma vez contra a versão containerizada aqui mesmo, nesta task, como prova).
+
+- [ ] **Step 1: Criar `Dockerfile` (multi-stage, build com Maven wrapper + runtime JRE)**
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /app
+COPY .mvn/ .mvn/
+COPY mvnw pom.xml ./
+RUN ./mvnw dependency:go-offline -B
+COPY src/ src/
+RUN ./mvnw clean package -DskipTests -B
+
+FROM eclipse-temurin:21-jre AS runtime
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+(`-DskipTests` no build da imagem: os testes já rodam no gate `./mvnw clean verify` da Task 6, separado —
+não precisa rodar de novo dentro do build da imagem, só duplicaria tempo.)
+
+- [ ] **Step 2: Adicionar o serviço `app` ao `compose.yaml`**
+
+```yaml
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    environment:
+      - 'SPRING_DOCKER_COMPOSE_ENABLED=false'
+      - 'POSTGRES_DB=${POSTGRES_DB:-mydatabase}'
+      - 'POSTGRES_USER=${POSTGRES_USER:-myuser}'
+      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}'
+      - 'KEYCLOAK_HTTP_PORT=${KEYCLOAK_HTTP_PORT:-8081}'
+      - 'KEYCLOAK_BACKEND_CLIENT_SECRET=${KEYCLOAK_BACKEND_CLIENT_SECRET:?defina no .env}'
+      # confira application.properties por qualquer outra env var lida diretamente
+      # (ex: APP_FRONTEND_ORIGIN, PROMETHEUS_SCRAPE_PASSWORD) e replique aqui se fizer
+      # sentido para o cenário "tudo em compose" - não assuma a lista acima é exaustiva,
+      # ela é o que já é conhecido a partir do .env.example; confira o arquivo real.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+```
+
+`SPRING_DOCKER_COMPOSE_ENABLED=false`: dentro do container, o Spring Boot não deve tentar gerenciar o
+ciclo de vida do próprio `docker compose` que já o está executando (não tem Docker CLI/socket disponível
+lá dentro, e não faria sentido mesmo se tivesse). Confira o nome exato da property em
+`application.properties` (pode ser `spring.docker.compose.enabled`, convertido para
+`SPRING_DOCKER_COMPOSE_ENABLED` pela convenção padrão do Spring Boot de env vars — confirme antes de
+assumir).
+
+- [ ] **Step 3: Build e subida, validação end-to-end**
+
+```bash
+docker compose build app
+docker compose up -d postgres rabbitmq keycloak app
+docker compose logs -f app  # até ver "Started GestaoApplication"
+curl -sf http://localhost:8080/actuator/health
+```
+
+Expected: `{"status":"UP"}`. Se falhar, o problema mais provável é conectividade Postgres/RabbitMQ/Keycloak
+(rede) — investigue antes de assumir que é outra coisa.
+
+- [ ] **Step 4: Validar que o login/token continua funcionando (o risco central desta task)**
+
+```bash
+curl -s -X POST "http://localhost:8081/realms/gestao/protocol/openid-connect/token" \
+  -d "client_id=gestao-frontend" -d "grant_type=password" \
+  -d "username=secretaria.teste" -d "password=secretaria123" | python3 -c "import json,sys; print(json.load(sys.stdin).get('access_token','')[:20])"
+```
+
+Pegue esse token e chame um endpoint protegido da app containerizada (`GET /api/turmas` com o header
+`Authorization: Bearer <token>`). Expected: 200, não 401 — confirma que o `issuer-uri` bateu com o token
+real emitido pelo Keycloak, mesmo com a app rodando em container.
+
+- [ ] **Step 5: Rodar pelo menos um e2e real contra a app containerizada**
+
+```bash
+bash e2e/smoke-test.sh
+```
+
+Expected: passa igual a quando a app roda via `./mvnw spring-boot:run` — prova que a containerização não
+regrediu nada. (O gate e2e completo, com todos os scripts + Playwright, é a Task 6, não precisa repetir
+tudo aqui — só uma prova rápida de que a app containerizada funciona de verdade antes de prosseguir.)
+
+- [ ] **Step 6: Atualizar o README**
+
+Na seção `## Como rodar localmente`, adicione uma opção alternativa (não substitua a existente) explicando
+que `docker compose up -d` agora também sobe a própria aplicação (serviço `app`), então rodar
+`./mvnw spring-boot:run` manualmente deixou de ser estritamente necessário — mas continua sendo a forma
+mais rápida de iterar em desenvolvimento ativo (sem rebuild de imagem a cada mudança), então mantenha as
+duas opções documentadas, deixando claro quando usar cada uma.
+
+- [ ] **Step 7: Atualizar `specs/013-finalizacao.md`**
+
+Marque o item de "Docker Compose subindo aplicação, banco de dados e mensageria" (PRD §04, deixado `[ ]`
+pela Task 5) como `[x]`, com evidência: `Dockerfile`, `compose.yaml` (serviço `app`), e a validação manual
+desta task (Steps 3-5).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add Dockerfile compose.yaml README.md specs/013-finalizacao.md
+git commit -m "feat: dockeriza a aplicacao, compose sobe app+banco+mensageria (D057, specs/013)"
+```
+
+---
+
 ### Task 6: Gate e2e completo + sessão de captura de evidências (prioridade 6)
 
 **Files:**
