@@ -24,13 +24,86 @@ ESCOPO DESTA FASE:
      - As 3-5 decisões mais defensáveis/questionáveis do projeto, com o trade-off real
        (ex: D001 monólito modular vs. microsserviços, D024 estratégia de concorrência com
        números reais da Fase 6, D002 RabbitMQ vs. Kafka).
+     - **Seção dedicada: como o padrão Outbox foi implementado via Spring Modulith.**
+       Motivação explícita do Pablo: quem não conhece Spring Modulith NÃO vai enxergar o
+       outbox lendo o código, porque não existe uma classe `OutboxPublisher` nem uma
+       tabela `outbox` criada à mão — o padrão está implementado pela infraestrutura do
+       framework (Event Publication Registry). A seção precisa tornar isso visível para o
+       avaliador:
+       - O conceito em uma frase: por que outbox existe (atomicidade entre a mudança de
+         estado no banco e a publicação do evento — sem "dual write" para o broker).
+       - O fluxo concreto neste projeto, passo a passo: evento de domínio publicado
+         dentro da MESMA transação do caso de uso → Modulith persiste a publicação na
+         tabela `event_publication` (mostrar o schema/migration Flyway correspondente)
+         → após o commit, o evento é externalizado para o RabbitMQ (anotação
+         `@Externalized` ou configuração equivalente usada no projeto) → publicação
+         marcada como completa; se a entrega falhar, a publicação fica incompleta e é
+         reprocessada (explicar a política de republicação configurada:
+         `republish-outstanding-events-on-restart` ou o que estiver de fato em uso).
+       - Mapa "onde está no código": apontar arquivo/classe/anotação de cada peça do
+         fluxo (evento, publicação, listener/externalização, configuração, migration),
+         para o avaliador conseguir seguir a trilha sozinho.
+       - Um diagrama simples do fluxo (Mermaid ou ASCII) vale muito aqui.
+       - O que ganhamos de graça vs. um outbox artesanal, e as limitações aceitas
+         (ex: polling/republicação em restart vs. relay dedicado tipo Debezium).
+       - Linkar a(s) entrada(s) de DECISIONS.md que originaram essa escolha.
      - Riscos conhecidos aceitos (ex: D035 rede do compose sem mTLS, qualquer outro achado
        de security-auditor mantido deliberadamente).
      - Caminho de evolução: como cada módulo se extrairia como serviço separado se
        necessário (pergunta explícita do PRD/entrevista).
-     - Tratamento de falhas de mensageria (retry/DLQ/outbox — já implementado, resumir).
+     - Tratamento de falhas de mensageria (retry/DLQ/outbox — já implementado, resumir e
+       cruzar com a seção de outbox acima, sem duplicar).
+   - Sugestão adicional: avaliar gerar o diagrama de módulos com o `Documenter` do próprio
+     Spring Modulith (saída PlantUML/C4 a partir dos testes de verificação de módulos) e
+     incluí-lo/referenciá-lo em ARQUITETURA.md — é evidência automática de que a
+     modularização declarada é a real.
 
-2. Revisão final de consistência entre README/ROADMAP/DECISIONS/specs
+2. Seção "Observabilidade" no README — papel de cada software da stack
+   - Hoje o README (presumivelmente) só instrui a subir o compose. Falta explicar O QUE é
+     cada componente de observabilidade e COMO ele funciona, de forma sucinta (2-4 frases
+     por componente), para um avaliador que não conhece a stack.
+   - Para CADA software de observabilidade presente no docker-compose (usar o que existe
+     de fato no compose — ex.: Micrometer/OpenTelemetry no app, Prometheus, Grafana,
+     Loki/Promtail, Tempo ou Zipkin/Jaeger, OTel Collector se houver), documentar:
+     - Papel: que sinal ele cobre (métricas, logs ou traces) e o que faz na arquitetura.
+     - Como funciona, em linguagem direta: ex. "Prometheus opera em modelo pull — faz
+       scrape periódico do endpoint `/actuator/prometheus` exposto pelo Micrometer e
+       armazena as séries temporais"; "Grafana não armazena nada — só consulta as
+       datasources (Prometheus/Loki/Tempo) e renderiza dashboards"; "o trace é propagado
+       entre HTTP e RabbitMQ via headers de contexto (traceparent), o que permite ver a
+       matrícula ponta-a-ponta num único trace".
+     - Como os componentes se conectam entre si (um mini-diagrama ou lista de setas
+       app → collector → backend → Grafana resolve).
+     - URL local e credenciais de cada UI, e 1 exemplo de "o que olhar primeiro" em cada
+       uma (ex: dashboard X no Grafana, query de log de uma matrícula no Loki, trace de
+       um POST /matriculas no Tempo).
+   - Se ficar longo demais para o README, extrair para `docs/OBSERVABILIDADE.md` e deixar
+     no README um resumo de 1 parágrafo + link — decidir pelo tamanho real.
+
+3. Evidências visuais no README (prints/screenshots)
+   - Motivação do Pablo: o avaliador pode não rodar tudo; o README precisa PROVAR
+     visualmente que o sistema e a observabilidade funcionam de ponta a ponta.
+   - Capturar e incluir (armazenar em `docs/images/`, referenciar com legenda curta
+     explicando o que a imagem demonstra — imagem sem legenda não conta como evidência):
+     - Print(s) do sistema: tela de login (Keycloak), listagem/fluxo de matrícula na UI
+       Angular, tela de administração de usuários/papéis (spec 010).
+     - Print dos logs: logs estruturados no Loki/Grafana (ou console) de UMA matrícula,
+       mostrando correlação por traceId entre módulos.
+     - Print do trace: trace distribuído completo de uma matrícula no Tempo/Zipkin,
+       mostrando os spans HTTP → domínio → publicação → consumo RabbitMQ.
+     - Print das métricas: dashboard do Grafana com métricas da aplicação (throughput,
+       latência, métricas de negócio se houver).
+     - Sugestões adicionais a avaliar (incluir as que agregarem, não todas por volume):
+       - RabbitMQ Management mostrando as filas + DLQ (evidência do tratamento de falha).
+       - Consulta na tabela `event_publication` com publicações completas — evidência
+         concreta do outbox funcionando (casa com a seção 1).
+       - Swagger UI / OpenAPI da API.
+       - Print (ou GIF curto) do teste de concorrência dos 20 alunos passando — é o
+         momento mais "vendável" do projeto.
+   - Momento certo de capturar: durante o gate e2e do item 6, quando o ambiente inteiro
+     já está no ar — não subir o ambiente duas vezes só para tirar print.
+
+4. Revisão final de consistência entre README/ROADMAP/DECISIONS/specs
    - Mesmo tipo de auditoria já feita nesta sessão antes de reestruturar as Fases 6-7-8,
      mas agora como checklist formal de fechamento, não reativa a um pedido pontual:
      - Todo spec com Status desatualizado no cabeçalho (ex: "aprovada" quando já está
@@ -39,24 +112,30 @@ ESCOPO DESTA FASE:
        igual das três coisas — já verificado ser fácil de auditar com grep)?
      - README reflete de fato a tela de administração de usuários (spec 010) e qualquer
        coisa da Fase 6?
+     - README linka os novos artefatos desta fase (ARQUITETURA.md, seção/doc de
+       observabilidade, imagens)?
      - ROADMAP.md com status real de cada fase (sem "Concluída" prematura)?
 
-3. Checklist literal do PRD, item por item, com evidência (não assumida)
+5. Checklist literal do PRD, item por item, com evidência (não assumida)
    - Percorra o PRD §06 (Critérios Críticos de Avaliação — itens eliminatórios) um por um
      e escreva, para cada, ONDE está a evidência no repositório (arquivo/teste/seção do
      README) de que o critério é atendido.
    - Percorra o PRD §08 (Como a Entrega Será Analisada) e §05 (README Esperado) da mesma
      forma — não vale "acho que está ok", tem que apontar o artefato.
+   - Prints do item 3 contam como evidência apontável quando o critério for demonstrável
+     visualmente.
    - Se algum item não tiver evidência real, essa é a lacuna mais importante a fechar
      antes de considerar o desafio pronto — não documente como "trade-off consciente" só
      para não fazer o trabalho.
 
-4. Gate e2e completo
+6. Gate e2e completo (+ sessão de captura de evidências)
    - `./mvnw clean verify` (backend completo) + toda a suíte `e2e/` (matrícula, mensageria,
      administração de usuários/papéis, concorrência de 20 alunos — tudo que foi construído
      até aqui) + frontend (`ng build`/`ng test`) numa mesma rodada final, sem nada quebrado.
+   - Com o ambiente no ar nesta rodada, executar o roteiro de capturas do item 3
+     (sistema, logs, trace, métricas, RabbitMQ, event_publication).
 
-5. Revisão do "Uso de IA" no README
+7. Revisão do "Uso de IA" no README
    - O PRD pede especificamente: quais ferramentas, em quais partes, o que foi revisado
      manualmente, quais trechos são mais críticos. Releia a seção atual do README — hoje
      ela defere bastante detalhe para `docs/DECISIONS.md` (que classifica cada decisão por
@@ -64,28 +143,33 @@ ESCOPO DESTA FASE:
      suficiente ou se merece um resumo mais direto e específico direto no README (ex:
      quantas decisões de cada origem, quais foram as mais contestadas pelo Pablo).
 
-6. "Pitch" de entrevista consolidado
+8. "Pitch" de entrevista consolidado
    - Não é conteúdo novo — é reunir num único lugar (seção de `docs/ARQUITETURA.md` ou do
      README) um índice de "pergunta provável de entrevista → onde está a resposta pronta"
      para as respostas que já foram escritas ao longo do projeto (ex: a resposta sobre
      concorrência da Fase 6, o trade-off Modulith vs. microsserviços de D001, como a
-     mensageria trata falha do broker, D035/D036 e outros riscos aceitos). O objetivo é
+     mensageria trata falha do broker, como o outbox do Modulith funciona e por que não há
+     uma classe "Outbox" no código, D035/D036 e outros riscos aceitos). O objetivo é
      não precisar procurar sob pressão numa sala de entrevista.
 
 FORA DO ESCOPO desta fase: qualquer funcionalidade nova; qualquer mudança de regra de
-negócio; retrabalho de decisões já fechadas (a menos que a checklist do item 3 revele uma
+negócio; retrabalho de decisões já fechadas (a menos que a checklist do item 5 revele uma
 lacuna real, não estética).
 
 SIGA O FLUXO DO CLAUDE.md:
 1. Confirme o próximo número de spec livre com `ls specs/`. Crie
-   `specs/0NN-finalizacao.md` a partir do template — o próprio checklist do item 3 acima
+   `specs/0NN-finalizacao.md` a partir do template — o próprio checklist do item 5 acima
    PODE ser a seção de critérios de aceite desta spec (é literalmente testável: cada linha
    do PRD tem uma evidência apontada ou não).
 2. Não há decisão técnica nova de arquitetura aqui (é consolidação) — mas se a checklist do
-   item 3 revelar uma lacuna que exige escolha entre alternativas, trate como qualquer
-   outra decisão não-trivial (skill decision-log).
-3. Implemente na ordem: documento arquitetural (1) → consistência (2) → checklist PRD (3,
-   pode revelar retrabalho) → gate final (4) → uso de IA (5) → pitch de entrevista (6).
+   item 5 revelar uma lacuna que exige escolha entre alternativas, ou se surgir escolha
+   real em documentação/ferramenta (ex: gerar ou não diagramas com o Documenter do
+   Modulith, README vs. docs/OBSERVABILIDADE.md), trate como qualquer outra decisão
+   não-trivial (skill decision-log).
+3. Implemente na ordem: documento arquitetural com outbox (1) → observabilidade (2) →
+   consistência (4) → checklist PRD (5, pode revelar retrabalho) → gate final + captura de
+   prints (6, alimenta o 3) → evidências visuais no README (3) → uso de IA (7) → pitch de
+   entrevista (8).
 4. Feche com o checklist de Definition of Done da spec.
 
 Comece pelo passo 1: me apresente o plano e a spec antes de tocar em qualquer arquivo.
