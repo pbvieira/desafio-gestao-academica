@@ -154,12 +154,11 @@ formalmente na Task 5.
 - [x] Quais logs, health checks, métricas ou mecanismos de rastreabilidade foram implementados —
   evidência: README §"Observabilidade" (linhas 191-217: tabela de URLs/credenciais, dashboard provisionado,
   endpoints do Actuator expostos) + §"Mensageria..." §"Rastreabilidade (trace ID)" (linhas 144-150).
-- [ ] Quais ferramentas de IA foram utilizadas, em quais partes, o que foi revisado manualmente e quais
-  trechos são mais críticos — **evidência parcial**: README §"Uso de IA" (linhas 304-311) confirma a
-  ferramenta (Claude Code) e que decisões estão em `docs/DECISIONS.md`, mas não enumera explicitamente "em
-  quais partes do projeto", "o que foi revisado manualmente" nem "quais trechos são mais críticos" como
-  itens diretos — o texto é genérico ("todas as fases"). Depende da Task 8 deste plano (revisão dedicada da
-  seção "Uso de IA"), ainda não executada — não é uma falha desta task, é sequenciamento do plano.
+- [x] Quais ferramentas de IA foram utilizadas, em quais partes, o que foi revisado manualmente e quais
+  trechos são mais críticos — evidência: README §"Uso de IA" (linhas 385-437, fechado na Task 8 deste plano,
+  commit `d33171c`) — enumera a contagem por origem (18 decisões ativas do Pablo / 10 sugestões da IA
+  revisadas / 31 defaults aceitos / 1 origem mista, `docs/DECISIONS.md`) e lista explicitamente os 5 trechos
+  de maior peso técnico com âncora real (D024/D053, D034, D031, D059, bug do dropdown de papel).
 
 (Evidência de cada item: seção correspondente do `README.md`, mapeada linha a linha acima, confirmada por
 leitura direta do arquivo nesta task.)
@@ -207,10 +206,11 @@ que o problema NÃO ocorre)
 - [x] Documentação: há documentação arquitetural e README suficientes para executar e validar — evidência:
   `docs/ARQUITETURA.md` + `docs/OBSERVABILIDADE.md` + `README.md`, todos abertos e lidos por completo
   nesta task.
-- [ ] Entrevista: o candidato consegue explicar as decisões, o código e o uso de IA (pitch consolidado) —
-  **não verificável ainda**: depende da Task 9 deste plano ("pitch de entrevista consolidado"), que ainda
-  não foi executada nesta sequência. Não é uma falha desta task — é sequenciamento do plano
-  (`docs/superpowers/plans/2026-07-13-finalizacao.md`, Task 9 vem depois da Task 5).
+- [x] Entrevista: o candidato consegue explicar as decisões, o código e o uso de IA (pitch consolidado) —
+  evidência: `docs/ARQUITETURA.md` §"Pitch de entrevista: índice pergunta → resposta pronta" (Task 9 deste
+  plano, esta task) — cobre as 10 perguntas literais do PRD §09, cada uma com ponteiro real e conferido
+  (arquivo/método/linha, seção de spec ou âncora de `docs/DECISIONS.md`), incluindo um trecho de código
+  recitável de cor (`TurmaRepository.consumirVaga`) para a pergunta "explique sem consultar documentação".
 
 ### PRD §07 — Diferenciais (informativo, não eliminatório — registrar presença/ausência)
 
@@ -245,9 +245,8 @@ que o problema NÃO ocorre)
 - [x] Boa organização do frontend — presente. Evidência: `frontend/src/app/{core,features,shared}`
   (confirmado via `find`), com `features/` subdividido por domínio (`turma`, `matricula`, `aluno`, `curso`,
   `disciplina`, `administracao`) — organização por feature, não por tipo de arquivo.
-- [ ] Boa explicação sobre uso de IA — **ainda não fechado**: a seção existe (README §"Uso de IA") mas de
-  forma genérica (ver nota no item correspondente do §05 acima); depende da Task 8 deste plano, ainda não
-  executada. Mesma situação do item §05 análogo — sequenciamento, não falha.
+- [x] Boa explicação sobre uso de IA — presente, evidência igual ao item §05 correspondente acima: README
+  §"Uso de IA" reforçado na Task 8 deste plano (commit `d33171c`).
 
 ### PRD §08 — Como a Entrega Será Analisada (9 dimensões — qualitativas, evidência mais forte disponível
 para cada uma, não um artefato único)
@@ -277,10 +276,17 @@ para cada uma, não um artefato único)
 
 ### Gate final (não é item do PRD, é verificação operacional desta spec)
 
-- [ ] `./mvnw clean verify` verde.
-- [ ] Suíte `e2e/` completa verde (3 scripts bash + Playwright `--repeat-each=10`).
-- [ ] `ng build` + `ng test --watch=false` verdes.
-- [ ] Evidências visuais capturadas e embutidas com legenda (nenhuma imagem "solta").
+- [x] `./mvnw clean verify` verde — rodado na Task 6 deste plano (147 testes, 0 falhas/erros, gate JaCoCo
+  mantido, confirmado após o fix D059 no commit `0fc6730` e novamente ao final da Task 6, commit `9bd473d`).
+- [x] Suíte `e2e/` completa verde (3 scripts bash + Playwright `--repeat-each=10`) — Task 6, 2ª/3ª tentativa:
+  os 3 scripts bash e a suíte Playwright de concorrência rodaram 20/20 (`--repeat-each=10`, duas vezes) sem
+  falha, contra a stack completa de pé.
+- [x] `ng build` + `ng test --watch=false` verdes — confirmado na Task 6 (correção do bug de dropdown de
+  papel, commit `9a31930`): 26/26 testes (`npx ng test --watch=false --browsers=ChromeHeadless`, suíte
+  completa, não só o teste novo) + `ng build` verdes, rodados diretamente antes do commit.
+- [x] Evidências visuais capturadas e embutidas com legenda (nenhuma imagem "solta") — 7 screenshots
+  capturados na Task 6 (commits `9bd473d`/`c1e7ec6`) e embutidos com legenda no README/ARQUITETURA/
+  OBSERVABILIDADE na Task 7 (commit `0fd43bf`), review clean.
 
 ## 7. Plano de testes
 
@@ -303,10 +309,22 @@ a auditoria de checklist (Task 5) confirmando que cada afirmação documentada t
 
 ## 9. Definition of Done desta tarefa
 
-- [ ] Critérios de aceite (seção 6) atendidos — checklist do PRD §04-§08 completo com evidência real
-- [ ] Gate final (seção 6) passando
-- [ ] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D054-D056 já registradas)
-- [ ] `code-reviewer` executado — achados endereçados ou justificadamente descartados
-- [ ] `security-auditor` executado — achados endereçados ou justificadamente descartados
-- [ ] Esta spec atualizada para refletir o que foi de fato implementado
-- [ ] `./mvnw clean verify` passando
+- [x] Critérios de aceite (seção 6) atendidos — checklist do PRD §04-§08 completo com evidência real. Os 3
+  itens que dependiam de sequenciamento (README §"Uso de IA" genérico → Task 8; "Entrevista"/pitch → Task 9)
+  foram fechados nas respectivas tasks e marcados `[x]` acima com evidência real. Único item genuinamente
+  ausente e corretamente marcado `[ ]`: "Paginação e filtros" (PRD §07, diferencial informativo, não
+  eliminatório) — confirmado ausente por busca literal no código, não uma lacuna escondida.
+- [x] Gate final (seção 6) passando — os 4 itens rodaram e passaram na Task 6 deste plano (ver evidência de
+  cada um marcada acima: `./mvnw clean verify` 147 testes verde, e2e bash+Playwright 20/20, `ng
+  build`/`ng test` 26/26 verdes, 7 screenshots capturados e embutidos).
+- [x] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D054-D059 registradas — D054-D056 na
+  Task 1, D057 na Task 5/5b, D059 no achado da Task 6; nenhuma decisão desta fase ficou fora do log).
+- [ ] `code-reviewer` executado — **pendente**: roda sobre o diff completo da fase (Task 1 até esta task),
+  como revisão final de branch, depois desta Task 9 — não antecipado aqui (mesmo erro já cometido e
+  corrigido na Fase 6, spec 012, commit `aa60b2e`; ver "Depois da Task 9" no brief de execução desta task).
+- [ ] `security-auditor` executado — **pendente**, mesmo motivo do item acima: roda junto com o
+  `code-reviewer` na revisão final de branch, ainda não disparada nesta sessão.
+- [x] Esta spec atualizada para refletir o que foi de fato implementado — seção 6 (3 itens sequenciados +
+  gate final) e esta seção 9 atualizadas nesta task com evidência real, não placeholder.
+- [x] `./mvnw clean verify` passando — confirmado verde na Task 6 (ver Gate final acima); nenhuma mudança de
+  código de produção desde então nesta fase (Tasks 7-9 são só documentação).
