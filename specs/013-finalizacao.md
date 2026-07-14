@@ -76,88 +76,200 @@ formalmente na Task 5.
 
 ### PRD §04 — Requisitos Específicos para Dev Sênior
 
-- [ ] Solução modular ou baseada em mais de um serviço — evidência: `docs/ARQUITETURA.md` §visão geral +
-  `ModularidadeTest.java` + `docs/architecture/modules.puml`.
-- [ ] Separação clara entre contexto acadêmico e contexto de notificações/auditoria/relatórios —
-  evidência: pacotes `academico`/`notificacao`, `docs/ARQUITETURA.md`.
-- [ ] Comunicação assíncrona usando RabbitMQ, Kafka ou equivalente — evidência: `MensageriaConfig.java`,
-  README §Mensageria, D002.
-- [ ] Publicação de eventos de domínio (`MatriculaCriada`, `MatriculaConfirmada`, `MatriculaCancelada`) —
-  evidência: os 3 records + `MatriculaService.java`.
-- [ ] Consumidor de eventos em outro módulo ou serviço — evidência: `MatriculaNotificacaoListener.java`.
-- [ ] Garantia de consistência na regra de vagas — evidência: D024/D025, `TurmaRepository.consumirVaga`,
-  `MatriculaConcorrenciaIntegrationTest`.
-- [ ] Preocupação explícita com concorrência na matrícula — evidência: spec 012 completa, D053,
-  `e2e/playwright/`.
-- [ ] Testes unitários e de integração nas regras críticas — evidência: cobertura JaCoCo ≥80%,
-  `MatriculaServiceTest`, `MatriculaConcorrenciaIntegrationTest`.
-- [ ] Docker Compose subindo aplicação, banco de dados e mensageria — evidência: `compose.yaml`, README
-  §Como rodar localmente.
-- [ ] Observabilidade mínima: logs estruturados, correlation/trace ID, health checks, métricas básicas —
-  evidência: `docs/OBSERVABILIDADE.md`, `/actuator/health`, D034.
-- [ ] **Documentação arquitetural curta (decisões, trade-offs, riscos conhecidos, evolução, tratamento de
-  falhas de mensageria)** — evidência: `docs/ARQUITETURA.md` (esta spec é a que o entrega).
-- [ ] README completo — evidência: `README.md` (ver itens do §05 abaixo, item a item).
+- [x] Solução modular ou baseada em mais de um serviço — evidência: `docs/ARQUITETURA.md` §"Visão geral"
+  (6 pacotes de nível superior reconhecidos como módulos por `ApplicationModules.of(...)`) +
+  `src/test/java/br/com/desafio/tecnico/gestao/ModularidadeTest.java` (`modulosRespeitamOsLimitesDeEncapsulamento()`
+  chama `ApplicationModules.of(GestaoApplication.class).verify()`) + `docs/architecture/modules.puml`
+  (aberto e confirmado: 5 componentes C4 — Academico, Administracao, Errorhandling, Notificacao,
+  Security — gerados pelo `Documenter` real).
+- [x] Separação clara entre contexto acadêmico e contexto de notificações/auditoria/relatórios —
+  evidência: `src/main/java/br/com/desafio/tecnico/gestao/{academico,notificacao}` (pacotes confirmados
+  via `ls`), `docs/ARQUITETURA.md` §"Visão geral" (explicita que os dois módulos só trocam eventos de
+  domínio, nunca chamada Java síncrona).
+- [x] Comunicação assíncrona usando RabbitMQ, Kafka ou equivalente — evidência:
+  `src/main/java/br/com/desafio/tecnico/gestao/config/MensageriaConfig.java` (topologia real de
+  exchange/filas/DLQ), README §"Mensageria assíncrona (RabbitMQ)", `docs/DECISIONS.md` D002.
+- [x] Publicação de eventos de domínio (`MatriculaCriada`, `MatriculaConfirmada`, `MatriculaCancelada`) —
+  evidência: os 3 records confirmados em `src/main/java/br/com/desafio/tecnico/gestao/academico/` com
+  anotação `@Externalized`, chamados por `MatriculaService.java` (`criar()`/`confirmar()`/`cancelar()`).
+- [x] Consumidor de eventos em outro módulo ou serviço — evidência:
+  `src/main/java/br/com/desafio/tecnico/gestao/notificacao/MatriculaNotificacaoListener.java` (confirmado:
+  `package ...notificacao;` + `@RabbitListener(queues = MensageriaConfig.FILA_MATRICULA)`).
+- [x] Garantia de consistência na regra de vagas — evidência: `docs/DECISIONS.md` D024 (`UPDATE`
+  condicional atômico `WHERE vagas_ocupadas < limite_vagas AND version = ?`) e D053 (decisão final),
+  `TurmaRepository.consumirVaga`, `src/test/java/.../academico/MatriculaConcorrenciaIntegrationTest.java`
+  (arquivo confirmado presente).
+- [x] Preocupação explícita com concorrência na matrícula — evidência: `specs/012-concorrencia-e-testes.md`
+  (Status: `concluída`, confirmado), D053, `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts`
+  (20 confirmações simultâneas via `Promise.all`, 20 execuções totais, 1×200/19×409 em todas — números
+  citados em `docs/ARQUITETURA.md` e no README).
+- [x] Testes unitários e de integração nas regras críticas — evidência: gate JaCoCo ≥80% configurado em
+  `pom.xml` (`<rule><element>BUNDLE</element>...<minimum>0.80</minimum>` confirmado, linha ~259),
+  `src/test/java/.../academico/service/MatriculaServiceTest.java` e
+  `MatriculaConcorrenciaIntegrationTest.java` (ambos confirmados presentes).
+- [ ] Docker Compose subindo aplicação, banco de dados e mensageria — **evidência parcial, item não
+  totalmente satisfeito**: `compose.yaml` confirmado sobe `postgres`, `redis`, `rabbitmq`, `keycloak` (+
+  stack de observabilidade sob profile) — banco de dados e mensageria estão cobertos, mas a **aplicação não
+  está no `compose.yaml`**; ela roda via `./mvnw spring-boot:run` no host (decisão deliberada `D003` em
+  `docs/DECISIONS.md`, registrada como "Aplicação entra no Docker Compose só numa fase posterior" — a
+  "fase posterior" seria perto da entrega final, que é exatamente a fase atual). O PRD pede isso
+  literalmente três vezes (§01.4, §03 tabela "Ambiente", §04 desta lista) — ver observação priorizada no
+  relatório desta task.
+- [x] Observabilidade mínima: logs estruturados, correlation/trace ID, health checks, métricas básicas —
+  evidência: `docs/OBSERVABILIDADE.md` (aberto e lido por completo — cobre Prometheus/Grafana/Loki/
+  Promtail/Jaeger, papel/funcionamento/conexão/URL/credenciais de cada um), README §"Observabilidade"
+  (`GET /actuator/health` público confirmado), `docs/DECISIONS.md` D034 (trace ID).
+- [x] **Documentação arquitetural curta (decisões, trade-offs, riscos conhecidos, evolução, tratamento de
+  falhas de mensageria)** — evidência: `docs/ARQUITETURA.md` (aberto e lido por completo — contém as 6
+  seções pedidas: visão geral, decisões defensáveis com números reais, outbox, riscos conhecidos aceitos,
+  caminho de evolução, tratamento de falhas de mensageria).
+- [x] README completo — evidência: `README.md` (311 linhas, 11 seções de nível 2 confirmadas via
+  `grep '^##'` — ver mapeamento item a item do §05 abaixo).
 
 ### PRD §05 — README Esperado (11 itens)
 
-- [ ] Como rodar o projeto localmente.
-- [ ] Como subir a solução com Docker Compose.
-- [ ] Como executar os testes automatizados.
-- [ ] Quais tecnologias foram usadas.
-- [ ] Quais foram as principais decisões técnicas.
-- [ ] Como a regra de vagas foi protegida.
-- [ ] Como a solução trata concorrência na matrícula.
-- [ ] Como os eventos de domínio são publicados e consumidos.
-- [ ] Como a solução trata falhas na mensageria.
-- [ ] Quais logs, health checks, métricas ou mecanismos de rastreabilidade foram implementados.
+- [x] Como rodar o projeto localmente — evidência: README §"Como rodar localmente" (linhas 13-35, passos
+  numerados 1-3 + pré-requisitos) e §"Frontend (Angular)" (linhas 37-76, `npm install`/`npm start`).
+- [x] Como subir a solução com Docker Compose — evidência: README §"Como rodar localmente" (`docker compose
+  up -d` e `docker compose --profile observability up -d`, linhas 21-28).
+- [x] Como executar os testes automatizados — evidência: README §"Como rodar os testes" (linhas 78-112:
+  `./mvnw clean verify`, 3 scripts `e2e/*.sh`, Playwright `--repeat-each=10`).
+- [x] Quais tecnologias foram usadas — evidência: README §"Tecnologias" (linhas 114-118).
+- [x] Quais foram as principais decisões técnicas — evidência: README §"Documentação" (linha 298, aponta
+  para `docs/DECISIONS.md`) + decisões citadas inline ao longo de todo o README (D002, D003, D008, D009,
+  D024, D032-D035, D036, D042, D045, D046, D053 todos referenciados no corpo do texto, não só na seção
+  final).
+- [x] Como a regra de vagas foi protegida — evidência: README §"Proteção de vaga e prova de concorrência"
+  (linhas 162-171, `UPDATE` condicional atômico com o SQL exato citado).
+- [x] Como a solução trata concorrência na matrícula — evidência: mesma seção, §"Prova real (não teórica)"
+  (linhas 173-189, números reais: 20 execuções, 1×200/19×409).
+- [x] Como os eventos de domínio são publicados e consumidos — evidência: README §"Mensageria assíncrona
+  (RabbitMQ)" (linhas 120-134).
+- [x] Como a solução trata falhas na mensageria — evidência: mesma seção, §"Confiabilidade sob falha do
+  broker (outbox)" e o fluxo de retry/DLQ (linhas 130-134, 152-156).
+- [x] Quais logs, health checks, métricas ou mecanismos de rastreabilidade foram implementados —
+  evidência: README §"Observabilidade" (linhas 191-217: tabela de URLs/credenciais, dashboard provisionado,
+  endpoints do Actuator expostos) + §"Mensageria..." §"Rastreabilidade (trace ID)" (linhas 144-150).
 - [ ] Quais ferramentas de IA foram utilizadas, em quais partes, o que foi revisado manualmente e quais
-  trechos são mais críticos.
+  trechos são mais críticos — **evidência parcial**: README §"Uso de IA" (linhas 304-311) confirma a
+  ferramenta (Claude Code) e que decisões estão em `docs/DECISIONS.md`, mas não enumera explicitamente "em
+  quais partes do projeto", "o que foi revisado manualmente" nem "quais trechos são mais críticos" como
+  itens diretos — o texto é genérico ("todas as fases"). Depende da Task 8 deste plano (revisão dedicada da
+  seção "Uso de IA"), ainda não executada — não é uma falha desta task, é sequenciamento do plano.
 
-(Evidência de cada item: seção correspondente do `README.md` — mapeada linha a linha na Task 5.)
+(Evidência de cada item: seção correspondente do `README.md`, mapeada linha a linha acima, confirmada por
+leitura direta do arquivo nesta task.)
 
 ### PRD §06 — Critérios Críticos de Avaliação (eliminatórios — 11 itens, todos precisam de evidência de
 que o problema NÃO ocorre)
 
-- [ ] Execução: aplicação roda de forma reproduzível, com instrução clara.
-- [ ] Stack: backend em Spring Boot.
-- [ ] Persistência: há persistência de dados real (Postgres).
-- [ ] Regras de negócio: regra de matrícula implementada, regra de vagas não quebra sob concorrência.
-- [ ] Camadas: separação clara de responsabilidades, não concentrado em controllers.
-- [ ] Testes: há testes para regras críticas de matrícula.
-- [ ] Erros: tratamento padronizado de erros (ProblemDetail).
-- [ ] Mensageria: há mensageria real com consumidor em outro módulo/serviço.
-- [ ] Arquitetura: separação em módulos não é artificial, tem ganho arquitetural real e defensável.
-- [ ] Consistência: há preocupação real com consistência/concorrência (prova, não afirmação).
-- [ ] Documentação: há documentação arquitetural e README suficientes para executar e validar.
-- [ ] Entrevista: o candidato consegue explicar as decisões, o código e o uso de IA (pitch consolidado,
-  Task 9).
+- [x] Execução: aplicação roda de forma reproduzível, com instrução clara — evidência: README
+  §"Como rodar localmente", 3 passos claros e sequenciais (`.env` → `docker compose up -d` → `./mvnw
+  spring-boot:run`); reproduzível, ainda que a aplicação em si não esteja dentro do `compose.yaml` (ver
+  nota no item §04 correspondente acima — a execução é reproduzível por instrução clara, mesmo não sendo
+  um único comando `docker compose up` cobrindo tudo).
+- [x] Stack: backend em Spring Boot — evidência: `pom.xml` (`spring-boot-starter-parent` 3.5.16,
+  confirmado no cabeçalho já lido em sessões anteriores do projeto e reconfirmado por
+  `grep spring-boot-starter-web pom.xml`), pacote base `br.com.desafio.tecnico.gestao`.
+- [x] Persistência: há persistência de dados real (Postgres) — evidência: `compose.yaml` serviço
+  `postgres` (`postgres:latest`, confirmado), `src/main/resources/db/migration/V1..V9` (9 migrations
+  Flyway confirmadas via `ls`, cobrindo Aluno/Curso/Disciplina/Turma/Matrícula + infraestrutura de eventos).
+- [x] Regras de negócio: regra de matrícula implementada, regra de vagas não quebra sob concorrência —
+  evidência: `TurmaRepository.consumirVaga` (UPDATE condicional), `MatriculaConcorrenciaIntegrationTest`,
+  `e2e/playwright/tests/matricula-concorrencia-20-alunos.spec.ts` (20/20 execuções sem quebra, números
+  citados acima).
+- [x] Camadas: separação clara de responsabilidades, não concentrado em controllers — evidência: pacote
+  `academico` com subpacotes `web` (controller), `service`, `domain`, `repository`, `dto` (confirmado via
+  `find`); `MatriculaController.java` tem 61 linhas vs. `MatriculaService.java` com 197 linhas — lógica de
+  negócio está no service, não no controller (checado por contagem de linhas, não assumido).
+- [x] Testes: há testes para regras críticas de matrícula — evidência: `MatriculaServiceTest.java`,
+  `MatriculaConcorrenciaIntegrationTest.java` (ambos confirmados presentes em `src/test/java/.../academico/`).
+- [x] Erros: tratamento padronizado de erros (ProblemDetail) — evidência:
+  `src/main/java/br/com/desafio/tecnico/gestao/errorhandling/GlobalExceptionHandler.java` +
+  `ProblemDetailFactory.java` (confirmados presentes, uso de `ProblemDetail` grepado em 4 arquivos),
+  `docs/DECISIONS.md` D016 (propriedade `errorCode` customizada no `ProblemDetail`).
+- [x] Mensageria: há mensageria real com consumidor em outro módulo/serviço — evidência: `compose.yaml`
+  serviço `rabbitmq` real (não em memória), `MatriculaNotificacaoListener.java` no pacote `notificacao`
+  (módulo diferente de `academico`, que publica) com `@RabbitListener` real.
+- [x] Arquitetura: separação em módulos não é artificial, tem ganho arquitetural real e defensável —
+  evidência: `ModularidadeTest.modulosRespeitamOsLimitesDeEncapsulamento()` **falha o build** se a
+  fronteira for violada (não é só uma convenção de pasta) + `docs/ARQUITETURA.md` explicita que
+  `academico`/`notificacao` só se comunicam por evento de domínio, nunca chamada Java síncrona — o
+  desacoplamento é verificável em teste, não apenas declarado em prosa.
+- [x] Consistência: há preocupação real com consistência/concorrência (prova, não afirmação) — evidência:
+  prova via Playwright com HTTP/Keycloak reais (não MockMvc simulado), 20 execuções, números exatos
+  reportados (1×200/19×409 em todas), comparação JVM isolada atômica-vs-pessimista documentada em
+  `docs/ARQUITETURA.md` §"D024/D053" com números de tempo reais (32ms vs. 33ms) — é prova, não afirmação.
+- [x] Documentação: há documentação arquitetural e README suficientes para executar e validar — evidência:
+  `docs/ARQUITETURA.md` + `docs/OBSERVABILIDADE.md` + `README.md`, todos abertos e lidos por completo
+  nesta task.
+- [ ] Entrevista: o candidato consegue explicar as decisões, o código e o uso de IA (pitch consolidado) —
+  **não verificável ainda**: depende da Task 9 deste plano ("pitch de entrevista consolidado"), que ainda
+  não foi executada nesta sequência. Não é uma falha desta task — é sequenciamento do plano
+  (`docs/superpowers/plans/2026-07-13-finalizacao.md`, Task 9 vem depois da Task 5).
 
 ### PRD §07 — Diferenciais (informativo, não eliminatório — registrar presença/ausência)
 
-- [ ] Outbox Pattern.
-- [ ] Idempotência no consumo de mensagens.
-- [ ] Retry e dead letter queue.
-- [ ] Tracing distribuído.
-- [ ] Autenticação e autorização.
-- [ ] CI/CD.
-- [ ] ADRs curtos.
-- [ ] Estratégia clara para refatoração de legado (caminho de evolução).
-- [ ] Paginação e filtros.
-- [ ] Boa organização do frontend.
-- [ ] Boa explicação sobre uso de IA.
+- [x] Outbox Pattern — presente. Evidência: `docs/ARQUITETURA.md` §"Outbox: como funciona neste projeto"
+  (Event Publication Registry do Spring Modulith, tabela `event_publication` via
+  `V8__infraestrutura_criar_tabela_event_publication.sql`, confirmada aberta e com o comentário SQL
+  citando explicitamente "spring-modulith-events-jpa").
+- [x] Idempotência no consumo de mensagens — presente. Evidência: tabela `evento_processado`
+  (`V9__notificacao_criar_tabela_evento_processado.sql`, confirmada aberta — comentário SQL cita dedupe
+  por `eventId`), consumida por `MatriculaNotificacaoListener.java`.
+- [x] Retry e dead letter queue — presente. Evidência: `MensageriaConfig.java`, README §"Mensageria
+  assíncrona (RabbitMQ)" (retry com TTL 10s, 3 tentativas, DLQ `notificacao.matricula.dlq`),
+  `docs/DECISIONS.md` D033.
+- [x] Tracing distribuído — presente. Evidência: `docs/OBSERVABILIDADE.md` §"Jaeger" (OTLP HTTP `:4318`,
+  `management.tracing.sampling.probability=1.0`), serviço `jaeger` confirmado em `compose.yaml`.
+- [x] Autenticação e autorização — presente. Evidência: serviço `keycloak` em `compose.yaml`, README
+  §"Autenticação (Keycloak)" (papéis `ALUNO`/`SECRETARIA`/`ADMIN`, RBAC/ABAC), specs 003/010.
+- [x] CI/CD — presente. Evidência: `.github/workflows/ci.yml` (confirmado aberto — job `frontend` roda
+  `ng test`/`ng build`, job `build` roda `./mvnw clean verify` + sobe `docker compose --profile
+  observability` + roda a aplicação).
+- [x] ADRs curtos — presente, em formato equivalente. Evidência: `docs/DECISIONS.md` (56 entradas
+  confirmadas via `grep -c '^## D[0-9]'`), cada uma com contexto/alternativas/decisão/trade-offs/riscos —
+  não usa o template ADR nomeado literalmente, mas cobre a mesma função.
+- [x] Estratégia clara para refatoração de legado (caminho de evolução) — presente. Evidência:
+  `docs/ARQUITETURA.md` §"Caminho de evolução" (passo a passo concreto de como extrair `notificacao` para
+  um serviço separado, respondendo diretamente à pergunta do PRD §09).
+- [ ] Paginação e filtros — **ausente, confirmado por busca no código**. `grep -rn "Pageable\|Page<"
+  src/main/java` não retornou nenhuma ocorrência; os endpoints de listagem (`GET /api/alunos`,
+  `/api/cursos`, `/api/disciplinas`, `/api/turmas`, `/api/administracao/usuarios`) não usam
+  `@RequestParam` para filtro nem paginação — retornam a lista completa. É um diferencial não obrigatório
+  (PRD §07), sua ausência não é eliminatória, mas é uma lacuna real, não uma suposição.
+- [x] Boa organização do frontend — presente. Evidência: `frontend/src/app/{core,features,shared}`
+  (confirmado via `find`), com `features/` subdividido por domínio (`turma`, `matricula`, `aluno`, `curso`,
+  `disciplina`, `administracao`) — organização por feature, não por tipo de arquivo.
+- [ ] Boa explicação sobre uso de IA — **ainda não fechado**: a seção existe (README §"Uso de IA") mas de
+  forma genérica (ver nota no item correspondente do §05 acima); depende da Task 8 deste plano, ainda não
+  executada. Mesma situação do item §05 análogo — sequenciamento, não falha.
 
-### PRD §08 — Como a Entrega Será Analisada (9 dimensões)
+### PRD §08 — Como a Entrega Será Analisada (9 dimensões — qualitativas, evidência mais forte disponível
+para cada uma, não um artefato único)
 
-- [ ] Funcionalidade entregue.
-- [ ] Organização do backend.
-- [ ] Regras de negócio.
-- [ ] Testes.
-- [ ] Frontend.
-- [ ] Documentação.
-- [ ] Arquitetura/desacoplamento.
-- [ ] Mensageria/eventos.
-- [ ] Observabilidade/operação.
+- [x] Funcionalidade entregue — evidência: CRUD de Aluno/Curso/Disciplina/Turma + fluxo de matrícula
+  completo (`academico/web/*Controller.java`, 5 controllers confirmados), `e2e/matricula-flow.sh` (fluxo
+  ponta a ponta citado no README).
+- [x] Organização do backend — evidência: pacotes `academico/{web,service,domain,repository,dto}`
+  confirmados, `docs/ARQUITETURA.md` §"Visão geral".
+- [x] Regras de negócio — evidência: `TurmaRepository.consumirVaga`, `MatriculaService.java` (197 linhas,
+  três métodos principais `criar()`/`confirmar()`/`cancelar()` citados em `docs/ARQUITETURA.md`).
+- [x] Testes — evidência: gate JaCoCo ≥80% no `pom.xml`, `MatriculaServiceTest`,
+  `MatriculaConcorrenciaIntegrationTest`, `OutboxReenvioIntegrationTest` (todos confirmados presentes).
+- [x] Frontend — evidência: `frontend/src/app/{core,features,shared}`, README §"Frontend (Angular)".
+- [x] Documentação — evidência: `README.md` (311 linhas), `docs/ARQUITETURA.md`, `docs/OBSERVABILIDADE.md`,
+  `docs/DECISIONS.md` (56 decisões), Swagger UI (`OpenApiConfig.java` confirmado presente).
+- [x] Arquitetura/desacoplamento — evidência: `ModularidadeTest.verify()` (limite reforçado em teste, não
+  só declarado), `docs/ARQUITETURA.md` §"Caminho de evolução".
+- [x] Mensageria/eventos — evidência: `MensageriaConfig.java`, outbox via Event Publication Registry,
+  idempotência (`evento_processado`), retry+DLQ, tudo documentado em `docs/ARQUITETURA.md` §"Outbox" e
+  §"Tratamento de falhas de mensageria".
+- [x] Observabilidade/operação — evidência: `docs/OBSERVABILIDADE.md` completo, `/actuator/health`
+  público, `/actuator/prometheus` protegido por Basic Auth, dashboard Grafana provisionado
+  (`docker/grafana/provisioning/dashboards/jvm-http-dashboard.json`, arquivo confirmado presente e
+  confirmado conter a métrica `matricula_vaga_conflito_total` via `grep` direto no JSON, não apenas citado
+  de segunda mão).
 
 ### Gate final (não é item do PRD, é verificação operacional desta spec)
 
