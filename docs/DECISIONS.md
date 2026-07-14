@@ -1907,6 +1907,9 @@ desta entrada (D046), não uma decisão de design nova — não há alternativa 
 list-membros-de-role", é um requisito técnico da Admin API do Keycloak, mesmo padrão de "requisito técnico
 sem alternativa" já usado para `serviceAccountsEnabled` acima.
 
+---
+
+<a id="d047"></a>
 ## D047 — Decisões do tema Keycloakify para o login (escopo, entrega, localização, estratégia de reskin)
 
 **Data:** 2026-07-13
@@ -1954,6 +1957,9 @@ account console ou e-mail, essa é uma extensão natural do mesmo `keycloak-them
 localização. Se o fluxo de build/volume se mostrar frágil (ex: nome de artefato mudando entre versões do
 Keycloakify), reconsiderar imagem Docker customizada como abordagem mais determinística.
 
+---
+
+<a id="d048"></a>
 ## D048 — `AdministracaoUsuarioService.listarUsuarios()` resolve papel via membros de role (O(3)), não N+1 por usuário
 
 **Data:** 2026-07-13
@@ -1991,6 +1997,9 @@ chamadas), o usuário-alvo fica temporariamente sem nenhum papel gerenciado. Ace
 baixo tráfego da tela (uso administrativo pontual, não um fluxo de usuário final) — documentado aqui para
 não ser redescoberto como "bug" depois; não há retry automático nem compensação implementados.
 
+---
+
+<a id="d049"></a>
 ## D049 — Ferramental da prova e2e de concorrência: Playwright isolado em `e2e/playwright/`, repetição via `--repeat-each`
 
 **Data:** 2026-07-13
@@ -2031,6 +2040,9 @@ baixa browser via `npm ci`" precisa ser confirmado empiricamente na implementaç
 — versões futuras do Playwright podem mudar esse comportamento de instalação; se a suposição estiver errada,
 a etapa de CI precisa de um `npx playwright install` extra.
 
+---
+
+<a id="d050"></a>
 ## D050 — Teardown do e2e de concorrência: curso/disciplina fixos reaproveitados (teardown completo é impossível hoje)
 
 **Data:** 2026-07-13
@@ -2072,6 +2084,9 @@ resto do app (`findByIdAndAtivoTrue` as filtra em toda consulta normal).
 muito, o número de Turmas soft-deletadas acumuladas no banco de desenvolvimento cresce sem limite (não afeta
 corretude, só volume de linhas órfãs) — revisitar se isso um dia virar um problema de tamanho de banco local.
 
+---
+
+<a id="d051"></a>
 ## D051 — Código de comparação com lock pessimista isolado em `src/test/java`, nunca em produção
 
 **Data:** 2026-07-13
@@ -2103,6 +2118,9 @@ confiar no desenho.
 **Riscos conhecidos / o que revisitar se o contexto mudar:** se a pessimista vencer a comparação, promover o
 código de `src/test/java` para produção é um follow-up manual, não automático — fora do escopo desta fase.
 
+---
+
+<a id="d052"></a>
 ## D052 — Métrica `matricula.vaga.conflito` com tag `motivo`, primeira métrica com tag do projeto
 
 **Data:** 2026-07-13
@@ -2129,6 +2147,9 @@ Prometheus.
 **Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado — cardinalidade fixa e
 baixa, sem risco de crescimento não controlado.
 
+---
+
+<a id="d053"></a>
 ## D053 — Decisão final: mantém UPDATE atômico condicional (D024), lock pessimista não substitui
 
 **Data:** 2026-07-13
@@ -2178,6 +2199,9 @@ matrícula concorrente crescer para uma escala de 'flash sale' (milhares de req/
 revisitar com reserva via Redis + fila". Esta comparação (N=10/20 alunos) não altera esse risco nem o
 resolve — só confirma que, na escala testada, a estratégia atual continua sendo a escolha correta.
 
+---
+
+<a id="d054"></a>
 ## D054 — Captura de evidências visuais via Playwright com browser real, sessão única e descartável
 
 **Data:** 2026-07-13
@@ -2209,6 +2233,9 @@ para não forçar uma captura de tela onde texto já é mais claro.
 **Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado — a instalação é local,
 temporária, e não se torna parte do toolchain permanente do projeto.
 
+---
+
+<a id="d055"></a>
 ## D055 — `docs/OBSERVABILIDADE.md` dedicado, README mantém só resumo + link
 
 **Data:** 2026-07-13
@@ -2231,6 +2258,9 @@ propósito operacional se perca, seguindo o mesmo padrão de separação já val
 observabilidade mudar; mitigado pelo README linkar explicitamente, então a informação não fica "escondida".
 **Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado.
 
+---
+
+<a id="d056"></a>
 ## D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid
 
 **Data:** 2026-07-13

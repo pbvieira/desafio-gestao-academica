@@ -6,9 +6,9 @@ completa e `docs/DECISIONS.md` para o histórico de decisões técnicas.
 
 > **Status:** domínio completo (Aluno, Curso, Disciplina, Turma, Matrícula), segurança
 > RBAC/ABAC via Keycloak, mensageria assíncrona (RabbitMQ) e frontend Angular implementados
-> e validados — ver `docs/ROADMAP.md` para o status por fase e `docs/DECISIONS.md` para as
-> decisões técnicas de cada uma. Pendente: consolidar o documento arquitetural curto de
-> entrevista sobre a estratégia final de concorrência (mecanismo já implementado, D024).
+> e validados — ver `docs/ROADMAP.md` para o status por fase, `docs/ARQUITETURA.md` para o
+> documento arquitetural curto de entrevista (decisões, trade-offs, riscos e caminho de
+> evolução) e `docs/DECISIONS.md` para o log granular de decisões técnicas de cada uma.
 
 ## Como rodar localmente
 
@@ -291,6 +291,10 @@ zero — não há passo manual adicional para o `loginTheme` ser aplicado.
 
 - `docs/ROADMAP.md` — planejamento em fases feito antes de começar, e como a execução real
   divergiu desse plano (material de apoio para a entrevista técnica).
+- `docs/ARQUITETURA.md` — documento arquitetural curto: decisões, trade-offs, riscos
+  conhecidos e caminho de evolução (puxa de `docs/DECISIONS.md`).
+- `docs/OBSERVABILIDADE.md` — como acessar Grafana, Prometheus e Jaeger, formato/localização
+  dos logs estruturados e quais endpoints do Actuator estão expostos.
 - `docs/DECISIONS.md` — log de decisões técnicas (o que foi decisão deliberada vs. default
   aceito da IA).
 - `specs/` — spec de cada fase do desenvolvimento (inclui `specs/008-frontend-angular.md`, com o detalhe

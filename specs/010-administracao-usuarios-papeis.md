@@ -1,6 +1,6 @@
 # 010 — Administração de usuários e papéis
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §03 (frontend Angular), §04–05 (segurança/observabilidade não
 funcionais) — funcionalidade além do escopo literal do PRD, pedida como diferencial pelo Pablo
 **Módulo(s) Modulith afetado(s):** novo módulo `administracao` (backend); `security` não é tocado além do
