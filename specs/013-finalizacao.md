@@ -156,7 +156,7 @@ formalmente na Task 5.
   endpoints do Actuator expostos) + §"Mensageria..." §"Rastreabilidade (trace ID)" (linhas 144-150).
 - [x] Quais ferramentas de IA foram utilizadas, em quais partes, o que foi revisado manualmente e quais
   trechos são mais críticos — evidência: README §"Uso de IA" (linhas 385-437, fechado na Task 8 deste plano,
-  commit `d33171c`) — enumera a contagem por origem (18 decisões ativas do Pablo / 10 sugestões da IA
+  commit `d33171c`) — enumera a contagem por origem (17 decisões ativas do Pablo / 10 sugestões da IA
   revisadas / 31 defaults aceitos / 1 origem mista, `docs/DECISIONS.md`) e lista explicitamente os 5 trechos
   de maior peso técnico com âncora real (D024/D053, D034, D031, D059, bug do dropdown de papel).
 
