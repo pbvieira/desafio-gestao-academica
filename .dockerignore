@@ -1,0 +1,16 @@
+# Mantém o contexto de build do Dockerfile pequeno - o Dockerfile só precisa de
+# .mvn/, mvnw, pom.xml e src/ (ver Dockerfile), mas sem este arquivo o `docker build`
+# envia o repositório inteiro (frontend/node_modules, target/, .git etc. - centenas
+# de MB) para o daemon antes de aplicar os filtros de COPY (specs/013, Task 5b).
+target/
+frontend/
+keycloak-theme/
+docs/
+e2e/
+logs/
+*.log
+.git/
+.idea/
+.superpowers/
+.claude/
+.prompts/

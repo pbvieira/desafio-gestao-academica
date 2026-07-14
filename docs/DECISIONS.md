@@ -77,6 +77,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D055 — `docs/OBSERVABILIDADE.md` dedicado, README mantém só resumo + link](#d055)
 - [D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid](#d056)
 - [D057 — D003 revisitada: aplicação entra no `compose.yaml` nesta fase final](#d057)
+- [D058 — Dockerização da app (Task 5b): `network_mode: host` + conexão explícita a Postgres/RabbitMQ, serviço atrás de profile próprio](#d058)
 
 ---
 
@@ -2328,4 +2329,64 @@ restando só documentação/evidência; risco de configuração de rede entre co
 possível em D003, precisa ser validado na prática (task de implementação, não só desta entrada de decisão).
 **Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum novo além do já registrado em D003 —
 esta entrada fecha o ciclo de revisão que D003 previa, não introduz um risco novo.
+
+---
+
+<a id="d058"></a>
+## D058 — Dockerização da app (Task 5b): `network_mode: host` + conexão explícita a Postgres/RabbitMQ, serviço atrás de profile próprio
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, implementação da Task 5b (D057) — decisões de nível de implementação dentro
+de um plano já aprovado pelo Pablo, sem alternativa contestável real na prática (ver justificativa de cada
+uma abaixo); registradas aqui por transparência, não porque exigiram escolha do Pablo em tempo real.
+**Spec relacionada:** specs/013-finalizacao.md (Task 5b)
+**Contexto:** o plano da Task 5b já vinha com o desenho de `network_mode: host` (para o `issuer-uri` do
+JWT continuar batendo sem mudar `application.properties`) e `SPRING_DOCKER_COMPOSE_ENABLED=false` (o
+container não tem socket/CLI do Docker para o spring-boot-docker-compose introspeccionar). Na
+implementação, dois problemas não previstos no desenho original apareceram:
+1. `application.properties` não tem **nenhuma** property `spring.datasource.*`/`spring.rabbitmq.host|port|
+   username|password` explícita — a conexão a Postgres/RabbitMQ depende inteiramente do
+   `spring-boot-docker-compose` (introspecção via Docker API) para descobrir usuário/senha/porta em tempo de
+   boot. Desligar esse mecanismo sem substituto (como o plano original previa) quebraria o boot da app
+   containerizada (`DataSource` sem URL).
+2. A porta AMQP do RabbitMQ era efêmera (`ports: ['5672']`, sem host fixo) — sem o
+   `spring-boot-docker-compose` para descobri-la em runtime, a app não teria como saber a porta real.
+3. (Achado só confirmado ao testar `docker compose up -d` sem argumentos após a service `app` existir): o
+   serviço `app`, sem estar atrás de um profile, passaria a ser incluído em todo `docker compose up -d` "cru"
+   — colidindo na porta 8080 com quem seguisse a Opção A do README (`./mvnw spring-boot:run`, também em
+   `network_mode` efetivo de host) rodando os dois ao mesmo tempo.
+
+**Alternativas consideradas:**
+- **(1) Montar o socket do Docker no container da app**, mantendo `SPRING_DOCKER_COMPOSE_ENABLED=true`, para
+  o `spring-boot-docker-compose` continuar funcionando de dentro do container — replicaria o comportamento
+  atual sem tocar `application.properties`, mas dá controle total do daemon Docker ao container da
+  aplicação; o mesmo trade-off já foi avaliado e rejeitado para o Promtail (D007/D017) por motivo idêntico
+  (superfície de risco desproporcional ao ganho). Descartada sem qualificar como decisão "em aberto" — é
+  precedente direto já fechado neste projeto.
+- **(2) Passar `spring.datasource.*`/`spring.rabbitmq.*` explicitamente como variáveis de ambiente no
+  `compose.yaml`** (escolhida) — não exige nenhuma mudança em `application.properties` (só variáveis de
+  ambiente do serviço `app`, mesmo padrão já usado para `KEYCLOAK_HTTP_PORT` etc.), mas exige que a porta
+  AMQP do RabbitMQ deixe de ser efêmera (mudança adicional em `compose.yaml`, fora do desenho original do
+  plano).
+- Para o profile: **(a) deixar `app` sem profile** (comportamento default do `docker compose up -d` passa a
+  incluir a app) vs. **(b) profile `app` dedicado**, mesmo padrão do `observability` (D008) — escolhida (b),
+  porque (a) mudaria silenciosamente o comportamento documentado de `docker compose up -d` (hoje "só sobe
+  infra") e criaria colisão de porta com a Opção A do README.
+**Decisão:** manter `SPRING_DOCKER_COMPOSE_ENABLED=false` (não montar o socket do Docker) e suprir
+`SPRING_DATASOURCE_URL/USERNAME/PASSWORD` e `SPRING_RABBITMQ_HOST/PORT/USERNAME/PASSWORD` como variáveis de
+ambiente do serviço `app`; fixar a porta AMQP do RabbitMQ (`RABBITMQ_AMQP_PORT`, default `5672`, só em
+loopback — mesmo padrão de toda porta administrativa deste compose); colocar o serviço `app` atrás de um
+profile `app` dedicado.
+**Justificativa:** as três mudanças são consequência técnica direta e não-contestável do desenho já aprovado
+em D057/Task 5b (network_mode: host + sem socket do Docker no container) — não introduzem uma alternativa
+de arquitetura nova, só fecham uma lacuna que o desenho original não detalhou. Ficam registradas porque
+mexem em `compose.yaml` além do que o brief da task literalmente descrevia, e porque a Task 5b pedia
+relatar qualquer desvio do desenho original.
+**Trade-offs aceitos:** mais uma superfície de configuração para manter sincronizada manualmente
+(`RABBITMQ_AMQP_PORT`/credenciais em 3 lugares: `.env`, serviço `rabbitmq`, serviço `app`) — mesmo padrão de
+trade-off já aceito para `KEYCLOAK_HTTP_PORT`/`JAEGER_OTLP_HTTP_PORT` neste projeto (D003).
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se `spring.datasource.*`/`spring.rabbitmq.*`
+ganharem valores explícitos em `application.properties` no futuro (ao invés de depender só do
+`spring-boot-docker-compose`), os valores hardcoded aqui em `compose.yaml` precisam ser revisados para não
+divergir.
 

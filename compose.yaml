@@ -24,21 +24,22 @@ services:
     ports:
       - '6379'
 
-  # Mensageria de domínio (D002: RabbitMQ em vez de Kafka). A porta AMQP (5672) fica
-  # efêmera — a aplicação a descobre automaticamente via spring-boot-docker-compose, como
-  # já acontece com postgres/redis. A porta da management UI é fixada via variável de
-  # ambiente porque é de uso humano (inspeção manual de filas/mensagens) — só em loopback,
-  # mesmo padrão de todo outro console admin deste compose (achado de security review,
-  # specs/007 §8/D035: o console de management do RabbitMQ concede administração completa
-  # do broker, não só leitura de filas — publicado sem restrição, era o único console
-  # admin do compose.yaml aberto para além de localhost).
+  # Mensageria de domínio (D002: RabbitMQ em vez de Kafka). A porta AMQP era efêmera até
+  # a Task 5b (specs/013): quando só a app rodando no host (D003) falava com o RabbitMQ,
+  # ela descobria a porta automaticamente via spring-boot-docker-compose (introspecção via
+  # Docker API). O serviço `app` deste compose roda com SPRING_DOCKER_COMPOSE_ENABLED=false
+  # (dentro do container não há socket/CLI do Docker para essa introspecção - ver comentário
+  # no serviço `app`), então precisa de uma porta AMQP conhecida de antemão via
+  # SPRING_RABBITMQ_PORT. Fixada + só em loopback (mesmo padrão de todo outro console/porta
+  # administrativa deste compose) - na prática mais restritivo do que a exposição anterior
+  # (efêmera, mas em todas as interfaces por não ter binding explícito).
   rabbitmq:
     image: 'rabbitmq:4.1-management'
     environment:
       - 'RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}'
       - 'RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?defina RABBITMQ_DEFAULT_PASS no .env (veja .env.example)}'
     ports:
-      - '5672'
+      - '127.0.0.1:${RABBITMQ_AMQP_PORT:-5672}:5672'
       - '127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672'
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
@@ -87,6 +88,68 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Aplicação Spring Boot (D057/specs/013, Task 5b) — até aqui só rodava via
+  # `./mvnw spring-boot:run` no host (D003). `network_mode: host` faz o container
+  # enxergar `localhost:5432`/`localhost:8081`/`localhost:5672` exatamente como o
+  # processo do host já enxerga hoje - zero mudança em application.properties,
+  # inclusive o issuer-uri do JWT (http://localhost:${KEYCLOAK_HTTP_PORT}/realms/gestao)
+  # continua batendo com o `iss` do token emitido pelo Keycloak. Só funciona em Linux
+  # (ambiente de desenvolvimento deste projeto) - aceitável no escopo do desafio.
+  # Consequência: sem `ports:` (a rede compartilhada com o host já expõe :8080 direto).
+  #
+  # SPRING_DOCKER_COMPOSE_ENABLED=false: dentro do container não há socket/CLI do Docker
+  # para o spring-boot-docker-compose introspeccionar postgres/rabbitmq (mesmo mecanismo
+  # que o processo do host usa hoje para descobrir usuário/senha/porta automaticamente) -
+  # não tem como funcionar aqui, e não faria sentido mesmo se tivesse (montar o socket do
+  # Docker no container só para isso seria dar controle total do daemon a ele; o mesmo
+  # trade-off já foi rejeitado para o promtail - D007/D017). Por isso spring.datasource.*
+  # e spring.rabbitmq.* precisam ser passados explicitamente abaixo - achado desta task:
+  # a app não tem NENHUMA property de conexão a banco/broker em application.properties,
+  # depende inteiramente do auto-discovery, então desligá-lo sem substituto quebraria o
+  # boot (DataSource sem URL). A porta AMQP precisou virar fixa no serviço `rabbitmq`
+  # acima pelo mesmo motivo (não dá para auto-descobrir uma porta efêmera sem o
+  # mecanismo de introspecção).
+  #
+  # Atrás de um profile próprio ('app'), mesmo padrão do profile 'observability' (D008):
+  # sem isto, todo `docker compose up -d` (hoje documentado como "só sobe a infra, rode
+  # a app via ./mvnw spring-boot:run" - D003) passaria a também compilar e subir a app em
+  # container, colidindo na porta 8080 com quem seguir esse mesmo README rodando o
+  # `./mvnw spring-boot:run` local (`network_mode: host` nos dois - ambos tentam a mesma
+  # porta) - achado desta task, não estava no desenho original do plano. Suba com
+  # `docker compose --profile app up -d` (ou liste `app` explicitamente no comando, que
+  # sempre funciona independente de profile).
+  app:
+    profiles: ['app']
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    environment:
+      - 'SPRING_DOCKER_COMPOSE_ENABLED=false'
+      - 'SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/${POSTGRES_DB:-mydatabase}'
+      - 'SPRING_DATASOURCE_USERNAME=${POSTGRES_USER:-myuser}'
+      - 'SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}'
+      - 'SPRING_RABBITMQ_HOST=localhost'
+      - 'SPRING_RABBITMQ_PORT=${RABBITMQ_AMQP_PORT:-5672}'
+      - 'SPRING_RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER:-guest}'
+      - 'SPRING_RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS:?defina RABBITMQ_DEFAULT_PASS no .env}'
+      - 'KEYCLOAK_HTTP_PORT=${KEYCLOAK_HTTP_PORT:-8081}'
+      - 'KEYCLOAK_BACKEND_CLIENT_SECRET=${KEYCLOAK_BACKEND_CLIENT_SECRET:?defina no .env}'
+      # Opcionais - mesmo default de application.properties se não definidas no .env;
+      # passadas explicitamente porque, rodando em container, a app não herda o shell
+      # do host (ao contrário do `./mvnw spring-boot:run`, que lê o `.env` só se o
+      # desenvolvedor der `source .env` antes - ver comentários no application.properties).
+      - 'JAEGER_OTLP_HTTP_PORT=${JAEGER_OTLP_HTTP_PORT:-4318}'
+      - 'PROMETHEUS_SCRAPE_PASSWORD=${PROMETHEUS_SCRAPE_PASSWORD:-changeme-prometheus-scrape-local}'
+      - 'APP_FRONTEND_ORIGIN=${APP_FRONTEND_ORIGIN:-http://localhost:4200}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
 
   # --- Observabilidade (specs/002-observabilidade.md) ---
   # Atrás de um profile opcional (D008): "docker compose up" do dia a dia continua leve

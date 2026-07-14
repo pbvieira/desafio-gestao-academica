@@ -26,12 +26,40 @@ Pré-requisitos: Java 21, Docker e Docker Compose.
    ```
    docker compose --profile observability up -d
    ```
-3. Rode a aplicação (fora do compose — ver `docs/DECISIONS.md`, D003):
-   ```
-   ./mvnw spring-boot:run
-   ```
 
-A aplicação sobe em `http://localhost:8080`. Swagger UI em
+A partir daqui há duas opções equivalentes para rodar a própria aplicação — escolha uma:
+
+**Opção A — `./mvnw spring-boot:run` (recomendada para desenvolvimento ativo):**
+
+```
+./mvnw spring-boot:run
+```
+
+Mais rápida para iterar (sem rebuild de imagem a cada mudança de código). Continua sendo o fluxo
+originalmente adotado neste projeto (`docs/DECISIONS.md`, D003).
+
+**Opção B — tudo em Docker Compose, incluindo a própria aplicação (D057):**
+
+```
+docker compose --profile app up -d --build
+```
+
+Sobe a aplicação (`Dockerfile` multi-stage, build com o Maven wrapper + runtime JRE) junto com o resto da
+infraestrutura, num único comando — fecha o pedido literal do PRD ("Docker Compose subindo aplicação,
+banco de dados e mensageria"). O serviço `app` roda com `network_mode: host` (só funciona em Linux — ambiente
+de desenvolvimento deste projeto): o container enxerga `localhost:5432`/`localhost:8081`/`localhost:5672`
+exatamente como o processo do host já enxerga na Opção A, então o `issuer-uri` do JWT e a validação de token
+continuam batendo sem nenhuma mudança em `application.properties`. Fica atrás de um profile próprio
+(`app`, mesmo padrão do profile `observability`) justamente para não colidir na porta 8080 com a Opção A —
+`docker compose up -d` (sem `--profile app`) continua subindo só a infraestrutura, como sempre subiu; use
+uma opção OU a outra, não as duas ao mesmo tempo.
+
+Como o serviço `app` não usa o `spring-boot-docker-compose` (não há socket do Docker disponível dentro do
+container — o mesmo trade-off já rejeitado para o Promtail, ver D007/D017), a conexão com Postgres/RabbitMQ é
+passada explicitamente via variáveis de ambiente no `compose.yaml` (`SPRING_DATASOURCE_*`/`SPRING_RABBITMQ_*`),
+em vez de auto-descoberta.
+
+Em ambas as opções, a aplicação sobe em `http://localhost:8080`. Swagger UI em
 `http://localhost:8080/swagger-ui.html`.
 
 ## Frontend (Angular)
@@ -89,8 +117,10 @@ D014).
 fluxo ponta a ponta real (HTTP + Keycloak reais, não simulados) — `smoke-test.sh`
 (infraestrutura), `matricula-flow.sh` (fluxo de matrícula, `specs/006-matricula.md`) e
 `administracao-papel-flow.sh` (reatribuição de papel, `specs/010-...`). Pressupõem a stack
-já de pé (`docker compose up` + `./mvnw spring-boot:run`); é o que o job `build` do CI
-executa depois de `./mvnw clean verify`:
+já de pé — tanto com a aplicação via `./mvnw spring-boot:run` (Opção A) quanto via
+`docker compose --profile app up -d` (Opção B, D057); os dois casos falam com a mesma porta
+`8080`, então nenhum script muda. É o que o job `build` do CI executa depois de
+`./mvnw clean verify`:
 
 ```bash
 bash e2e/smoke-test.sh

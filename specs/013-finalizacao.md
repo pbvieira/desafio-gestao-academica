@@ -107,14 +107,17 @@ formalmente na Task 5.
   `pom.xml` (`<rule><element>BUNDLE</element>...<minimum>0.80</minimum>` confirmado, linha ~259),
   `src/test/java/.../academico/service/MatriculaServiceTest.java` e
   `MatriculaConcorrenciaIntegrationTest.java` (ambos confirmados presentes).
-- [ ] Docker Compose subindo aplicação, banco de dados e mensageria — **evidência parcial, item não
-  totalmente satisfeito**: `compose.yaml` confirmado sobe `postgres`, `redis`, `rabbitmq`, `keycloak` (+
-  stack de observabilidade sob profile) — banco de dados e mensageria estão cobertos, mas a **aplicação não
-  está no `compose.yaml`**; ela roda via `./mvnw spring-boot:run` no host (decisão deliberada `D003` em
-  `docs/DECISIONS.md`, registrada como "Aplicação entra no Docker Compose só numa fase posterior" — a
-  "fase posterior" seria perto da entrega final, que é exatamente a fase atual). O PRD pede isso
-  literalmente três vezes (§01.4, §03 tabela "Ambiente", §04 desta lista) — ver observação priorizada no
-  relatório desta task.
+- [x] Docker Compose subindo aplicação, banco de dados e mensageria — **fechado na Task 5b (D057)**:
+  `Dockerfile` (multi-stage, build com Maven wrapper + runtime JRE) + serviço `app` em `compose.yaml`
+  (`network_mode: host`, atrás do profile `app`) — `docker compose --profile app up -d --build` sobe
+  aplicação, Postgres e RabbitMQ num único comando. Validado de ponta a ponta nesta task: `GET
+  /actuator/health` → `{"status":"UP"}` com a app containerizada; token real obtido do Keycloak do compose
+  e usado contra `GET /api/turmas` da app containerizada → 401 sem token / 200 com token (confirma que o
+  `issuer-uri` bateu com o `iss` do JWT real, mesmo em container); `e2e/smoke-test.sh` e
+  `e2e/matricula-flow.sh` (fluxo completo criar→confirmar→duplicidade→cancelar→vaga liberada, incluindo
+  consumo real do evento pelo RabbitMQ) rodados com sucesso contra a app containerizada. `./mvnw
+  spring-boot:run` (D003) continua documentado e funcional como opção alternativa mais rápida para
+  desenvolvimento ativo — ver README §"Como rodar localmente".
 - [x] Observabilidade mínima: logs estruturados, correlation/trace ID, health checks, métricas básicas —
   evidência: `docs/OBSERVABILIDADE.md` (aberto e lido por completo — cobre Prometheus/Grafana/Loki/
   Promtail/Jaeger, papel/funcionamento/conexão/URL/credenciais de cada um), README §"Observabilidade"
@@ -164,10 +167,10 @@ leitura direta do arquivo nesta task.)
 que o problema NÃO ocorre)
 
 - [x] Execução: aplicação roda de forma reproduzível, com instrução clara — evidência: README
-  §"Como rodar localmente", 3 passos claros e sequenciais (`.env` → `docker compose up -d` → `./mvnw
-  spring-boot:run`); reproduzível, ainda que a aplicação em si não esteja dentro do `compose.yaml` (ver
-  nota no item §04 correspondente acima — a execução é reproduzível por instrução clara, mesmo não sendo
-  um único comando `docker compose up` cobrindo tudo).
+  §"Como rodar localmente", instruções claras e sequenciais (`.env` → `docker compose up -d`), com duas
+  opções documentadas para a aplicação em si: `./mvnw spring-boot:run` (D003) ou, a partir da Task 5b
+  (D057), `docker compose --profile app up -d --build` — um único comando cobrindo aplicação, banco de
+  dados e mensageria (ver item §04 correspondente acima, agora `[x]`).
 - [x] Stack: backend em Spring Boot — evidência: `pom.xml` (`spring-boot-starter-parent` 3.5.16,
   confirmado no cabeçalho já lido em sessões anteriores do projeto e reconfirmado por
   `grep spring-boot-starter-web pom.xml`), pacote base `br.com.desafio.tecnico.gestao`.
