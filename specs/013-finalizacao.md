@@ -160,7 +160,7 @@ formalmente na Task 5.
 (Evidência de cada item: seção correspondente do `README.md`, mapeada linha a linha acima, confirmada por
 leitura direta do arquivo nesta task.)
 
-### PRD §06 — Critérios Críticos de Avaliação (eliminatórios — 11 itens, todos precisam de evidência de
+### PRD §06 — Critérios Críticos de Avaliação (eliminatórios — 12 itens, todos precisam de evidência de
 que o problema NÃO ocorre)
 
 - [x] Execução: aplicação roda de forma reproduzível, com instrução clara — evidência: README
