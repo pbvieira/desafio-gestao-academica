@@ -161,7 +161,12 @@ test('disputa de 20 alunos pela última vaga: exatamente 1 confirmação vence, 
     const conflitos = confirmacoes.filter((r) => r.status() === 409);
     const outros = confirmacoes.filter((r) => r.status() !== 200 && r.status() !== 409);
 
-    expect(outros.length, 'nenhuma confirmação deve retornar status inesperado (nem exceção/timeout)').toBe(0);
+    // Nota (revisão final de branch, specs/012): esta asserção cobre status HTTP inesperados
+    // (nem 200 nem 409). Uma exceção de rede/timeout genuína dentro do Promise.all acima já
+    // rejeitaria a promise correspondente e falharia o teste no próprio await - não chegaria
+    // a popular "outros". As duas causas de falha são distintas, mas ambas fazem o teste
+    // falhar corretamente.
+    expect(outros.length, 'nenhuma confirmação deve retornar status HTTP inesperado (nem 200 nem 409)').toBe(0);
     expect(sucessos.length, 'exatamente 1 confirmação deve ter sucesso').toBe(1);
     expect(conflitos.length, 'exatamente 19 confirmações devem receber 409').toBe(19);
 

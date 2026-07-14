@@ -2144,7 +2144,15 @@ implementada só para comparação (D051). Números reais coletados:
   `sucessos=1, conflitos=9, excecoesInesperadas=0, tempoTotalMs=32`; estratégia pessimista (`PESSIMISTIC_WRITE`,
   código isolado em `src/test/java`, D051) — `sucessos=1, conflitos=9, excecoesInesperadas=0, tempoTotalMs=33`.
   Corretude idêntica; diferença de tempo (32ms vs. 33ms) estatisticamente insignificante nessa escala e
-  execução única — não é um sinal de performance confiável, apenas ruído de medição.
+  execução única — não é um sinal de performance confiável, apenas ruído de medição. Achado da revisão
+  final de branch (2026-07-13): as duas execuções também não fazem exatamente o mesmo trabalho no banco —
+  as 10 threads da estratégia atômica capturam a mesma `version` antes da corrida, então o predicado
+  `WHERE ... AND version = :version` já decide o vencedor sem serialização real de lock (nove das dez
+  chamadas falham por versão desatualizada, não por espera de lock); a pessimista, ao contrário, serializa
+  de verdade via `PESSIMISTIC_WRITE`. Isso é fiel à produção (cada uma das 20 matrículas realmente parte da
+  mesma `version` antes de disputar a vaga) e não invalida a conclusão de corretude, mas os 32ms/33ms
+  comparam trabalhos diferentes no banco, não a mesma carga medida duas vezes — por isso a comparação de
+  tempo já era tratada como ruído, não como decisão.
 **Alternativas consideradas:**
 - Manter a estratégia atômica condicional (D024) — já validada em produção desde a spec 006, sem nenhuma
   vantagem de performance demonstrada pela alternativa nessa escala, e evita manter um lock de linha aberto
