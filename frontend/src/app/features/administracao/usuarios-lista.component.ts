@@ -37,12 +37,11 @@ const PAPEIS: Papel[] = ['ALUNO', 'SECRETARIA', 'ADMIN'];
               <td>{{ usuario.email }}</td>
               <td>
                 <select
-                  [value]="usuario.papel"
                   (change)="onPapelAlterado(usuario.id, $event)"
                   [disabled]="alterando() === usuario.id"
                 >
                   @for (papel of papeis; track papel) {
-                    <option [value]="papel">{{ papel }}</option>
+                    <option [value]="papel" [selected]="papel === usuario.papel">{{ papel }}</option>
                   }
                 </select>
               </td>
