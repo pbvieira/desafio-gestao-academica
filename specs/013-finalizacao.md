@@ -231,7 +231,7 @@ que o problema NÃO ocorre)
 - [x] CI/CD — presente. Evidência: `.github/workflows/ci.yml` (confirmado aberto — job `frontend` roda
   `ng test`/`ng build`, job `build` roda `./mvnw clean verify` + sobe `docker compose --profile
   observability` + roda a aplicação).
-- [x] ADRs curtos — presente, em formato equivalente. Evidência: `docs/DECISIONS.md` (56 entradas
+- [x] ADRs curtos — presente, em formato equivalente. Evidência: `docs/DECISIONS.md` (59 entradas
   confirmadas via `grep -c '^## D[0-9]'`), cada uma com contexto/alternativas/decisão/trade-offs/riscos —
   não usa o template ADR nomeado literalmente, mas cobre a mesma função.
 - [x] Estratégia clara para refatoração de legado (caminho de evolução) — presente. Evidência:
@@ -262,7 +262,7 @@ para cada uma, não um artefato único)
   `MatriculaConcorrenciaIntegrationTest`, `OutboxReenvioIntegrationTest` (todos confirmados presentes).
 - [x] Frontend — evidência: `frontend/src/app/{core,features,shared}`, README §"Frontend (Angular)".
 - [x] Documentação — evidência: `README.md` (311 linhas), `docs/ARQUITETURA.md`, `docs/OBSERVABILIDADE.md`,
-  `docs/DECISIONS.md` (56 decisões), Swagger UI (`OpenApiConfig.java` confirmado presente).
+  `docs/DECISIONS.md` (59 decisões), Swagger UI (`OpenApiConfig.java` confirmado presente).
 - [x] Arquitetura/desacoplamento — evidência: `ModularidadeTest.verify()` (limite reforçado em teste, não
   só declarado), `docs/ARQUITETURA.md` §"Caminho de evolução".
 - [x] Mensageria/eventos — evidência: `MensageriaConfig.java`, outbox via Event Publication Registry,

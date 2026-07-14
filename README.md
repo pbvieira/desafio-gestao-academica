@@ -391,10 +391,11 @@ está registrada em `docs/DECISIONS.md`, com a origem de cada uma classificada
 explicitamente. Achados de `code-reviewer`/`security-auditor` (também via IA) que geraram
 mudança de implementação estão documentados nas specs correspondentes em `specs/`.
 
-**Contagem por origem** (60 entradas em `docs/DECISIONS.md`, contadas via
-`grep -c '^\*\*Origem:\*\*'`):
+**Contagem por origem** (59 entradas reais em `docs/DECISIONS.md`, `grep -c '^## D[0-9]'`; a busca
+`grep -c '^\*\*Origem:\*\*'` retorna 60 porque também casa a linha de exemplo do próprio template
+"`**Origem:** 🧑 / 🤝 / 🤖`" — descontada abaixo):
 
-- 🧑 18 decisões ativas do Pablo (a IA não decidiu, só executou ou apresentou alternativas).
+- 🧑 17 decisões ativas do Pablo (a IA não decidiu, só executou ou apresentou alternativas).
 - 🤝 10 sugestões da IA revisadas/ajustadas pelo Pablo antes de aceitas.
 - 🤖 31 defaults da IA aceitos sem alteração.
 - 1 entrada de origem mista (D047, tema com vários pontos de decisão independentes — origem

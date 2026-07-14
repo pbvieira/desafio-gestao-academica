@@ -22,11 +22,10 @@ class ModularidadeTest {
 	/**
 	 * specs/013-finalizacao.md, D056: gera a saída PlantUML do Documenter do Modulith -
 	 * evidência automática de que a modularização declarada em docs/ARQUITETURA.md é a
-	 * real, derivada do mesmo ApplicationModules usado por verify() acima. Não é um
-	 * teste de asserção (sem @Test de verificação) - roda uma vez, manualmente, para
-	 * gerar o artefato comitado em docs/architecture/. Não faz parte do gate de CI
-	 * (não precisa rodar a cada build; o diagrama só muda se a estrutura de módulos
-	 * mudar).
+	 * real, derivada do mesmo ApplicationModules usado por verify() acima. Roda a cada
+	 * build (é um @Test comum, faz parte do gate de CI como qualquer outro), mas não
+	 * faz nenhuma asserção - só regrava o artefato em docs/architecture/, que só muda
+	 * de fato se a estrutura de módulos mudar.
 	 */
 	@Test
 	void geraDocumentacaoDeModulos() {

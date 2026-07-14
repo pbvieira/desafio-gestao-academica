@@ -1,6 +1,6 @@
 # Arquitetura — Gestão de Matrículas Acadêmicas
 
-Documento curto, não é um substituto de [`docs/DECISIONS.md`](DECISIONS.md) (fonte granular, 56 decisões
+Documento curto, não é um substituto de [`docs/DECISIONS.md`](DECISIONS.md) (fonte granular, 59 decisões
 registradas até esta fase) — aqui está a história arquitetural, com link pontual para profundidade quando
 precisar.
 
