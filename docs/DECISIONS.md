@@ -78,6 +78,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid](#d056)
 - [D057 — D003 revisitada: aplicação entra no `compose.yaml` nesta fase final](#d057)
 - [D058 — Dockerização da app (Task 5b): `network_mode: host` + conexão explícita a Postgres/RabbitMQ, serviço atrás de profile próprio](#d058)
+- [D059 — RabbitMQContainer dedicado nos 6 testes de integração que isolam o Postgres via Testcontainers](#d059)
 
 ---
 
@@ -2389,4 +2390,60 @@ trade-off já aceito para `KEYCLOAK_HTTP_PORT`/`JAEGER_OTLP_HTTP_PORT` neste pro
 ganharem valores explícitos em `application.properties` no futuro (ao invés de depender só do
 `spring-boot-docker-compose`), os valores hardcoded aqui em `compose.yaml` precisam ser revisados para não
 divergir.
+
+---
+
+<a id="d059"></a>
+## D059 — RabbitMQContainer dedicado nos 6 testes de integração que isolam o Postgres via Testcontainers
+
+**Data:** 2026-07-14
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/013-finalizacao.md (Task 6 — achado durante o gate e2e)
+**Contexto:** durante a Task 6 (gate e2e completo), o subagent implementador encontrou `./mvnw clean
+verify` falhando de forma determinística e reprodutível num ambiente 100% novo: 27 erros em 6 classes de
+teste (`CursoIntegrationTest`, `AlunoControllerIntegrationTest`, `MatriculaIntegrationTest`,
+`MatriculaConcorrenciaIntegrationTest`, `LockPessimistaVsAtomicoComparativoIntegrationTest`,
+`AdministracaoUsuarioControllerIntegrationTest`), todos `AmqpAuthenticationException: ACCESS_REFUSED` na
+subida do listener RabbitMQ. Causa raiz: essas 6 classes definem `spring.docker.compose.enabled=false`
+para apontar seu próprio `PostgreSQLContainer` isolado (em vez do Postgres do `compose.yaml`
+compartilhado) — mas esse switch é global, não seletivo por serviço, e desliga também a autodescoberta do
+RabbitMQ. Como `application.properties` nunca teve nenhuma property `spring.rabbitmq.*` explícita
+(dependia 100% do `spring-boot-docker-compose` para descobrir host/porta/credenciais), sem essa
+autodescoberta o client AMQP cai no default hardcoded da biblioteca (`guest`/`guest`), que não bate com a
+senha real do `.env` (`RABBITMQ_DEFAULT_PASS`, intencionalmente não-default, D004). O bug é latente desde
+a Fase 2 (as 6 classes já desligavam docker-compose antes de existir qualquer `@RabbitListener`) e só
+virou bloqueante na Fase 4, quando `MatriculaNotificacaoListener` passou a exigir uma conexão AMQP
+funcional em qualquer contexto Spring completo — mascarado até agora porque o container local de
+RabbitMQ nunca tinha sido recriado do zero (`RABBITMQ_DEFAULT_PASS` só é aplicado no primeiro boot de um
+container com volume vazio; trocar `.env` depois não afeta um container já inicializado). Como
+`.github/workflows/ci.yml` sempre sobe um ambiente 100% novo, o mesmo bug deveria reproduzir lá também
+em qualquer execução desde a Fase 4 — não foi possível confirmar contra o histórico real do Actions
+nesta sessão (branch 17 commits à frente de `origin/master`, sem `gh auth`), mas a lógica é a mesma.
+**Alternativas consideradas:**
+- **(1) `RabbitMQContainer` dedicado por classe** (escolhida) — cada uma das 6 classes ganha seu próprio
+  container RabbitMQ via Testcontainers, com `spring.rabbitmq.{host,port,username,password}` apontando
+  para ele via `@DynamicPropertySource`, exatamente como `MensageriaConfiabilidadeIntegrationTest` e
+  `OutboxReenvioIntegrationTest` já fazem. Isolamento total (nenhuma dependência de estado externo),
+  consistente com o padrão já estabelecido no projeto para as 2 classes que já precisavam de RabbitMQ.
+  Custo: mais um container subindo por classe de teste (tempo de boot adicional).
+- **(2) Apontar as 6 classes para o RabbitMQ já em execução no `compose.yaml` compartilhado**, lendo
+  host/porta/credenciais reais do ambiente (mesma forma que a app em produção se conecta) — evita subir
+  containers extras, mas acopla os testes ao estado de um serviço externo compartilhado (ordem de
+  execução, estado deixado por um teste anterior, RabbitMQ do compose precisar estar de pé antes de rodar
+  a suíte) — o oposto do motivo original de isolar o Postgres via Testcontainers nessas mesmas classes.
+**Decisão:** opção (1) — `RabbitMQContainer` dedicado via Testcontainers em cada uma das 6 classes,
+espelhando o padrão já em uso no projeto.
+**Justificativa:** a motivação original de isolar o Postgres nessas 6 classes (não depender do estado do
+Postgres do `compose.yaml`) se aplica igualmente ao RabbitMQ — inconsistente isolar um serviço e não o
+outro na mesma classe de teste. Consistência com o padrão já estabelecido (2 classes já usam
+`RabbitMQContainer` da mesma forma) elimina qualquer decisão de design nova de fato — é a extensão óbvia
+de um precedente já aceito no projeto, não uma alternativa contestável.
+**Trade-offs aceitos:** mais um container Testcontainers subindo por classe de teste afetada (tempo de
+build/verify um pouco maior); duplicação do bloco `@Container RabbitMQContainer` + `@DynamicPropertySource`
+nas 6 classes (nenhuma delas compartilha uma superclasse/base de teste hoje — extrair uma base comum ficou
+fora do escopo deste fix pontual, ver riscos abaixo).
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se mais classes de teste passarem a precisar
+desse mesmo par Postgres+RabbitMQ isolado, vale extrair uma classe-base `@Testcontainers` comum em vez de
+repetir o bloco pela 7ª vez — não fazer isso agora é aceitável para 6 ocorrências, mas não escalaria bem
+além disso.
 

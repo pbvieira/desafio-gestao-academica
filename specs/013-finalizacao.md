@@ -67,6 +67,7 @@ vez de reescrever o conteúdo — mesmo padrão já usado no projeto entre READM
 | 1 | Como capturar evidências visuais sem ferramenta de screenshot nativa | subagent+Playwright browser real vs. captura manual pelo Pablo vs. híbrido | [D054](../docs/DECISIONS.md#d054) — subagent + Playwright, sessão única e descartável |
 | 2 | Onde vive a explicação expandida de observabilidade | `docs/OBSERVABILIDADE.md` dedicado vs. expandir a seção do README | [D055](../docs/DECISIONS.md#d055) — `docs/OBSERVABILIDADE.md` dedicado |
 | 3 | Como gerar o diagrama de módulos | `Documenter` do Modulith renderizado vs. `.puml` como texto + Mermaid manual vs. só Mermaid manual | [D056](../docs/DECISIONS.md#d056) — `.puml` via Documenter (texto) + Mermaid manual nos fluxos narrativos |
+| 4 | Achado durante a Task 6: 6 testes de integração caem para RabbitMQ `guest/guest` ao desligar `spring.docker.compose.enabled` para isolar o Postgres | `RabbitMQContainer` dedicado por classe (espelha padrão existente) vs. apontar para o RabbitMQ compartilhado do compose | [D059](../docs/DECISIONS.md#d059) — `RabbitMQContainer` dedicado, mesmo padrão já usado em `MensageriaConfiabilidadeIntegrationTest`/`OutboxReenvioIntegrationTest` |
 
 ## 6. Critérios de aceite
 
