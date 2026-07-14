@@ -73,6 +73,9 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D051 — Código de comparação com lock pessimista isolado em `src/test/java`, nunca em produção](#d051)
 - [D052 — Métrica `matricula.vaga.conflito` com tag `motivo`, primeira métrica com tag do projeto](#d052)
 - [D053 — Decisão final: mantém UPDATE atômico condicional (D024), lock pessimista não substitui](#d053)
+- [D054 — Captura de evidências visuais via Playwright com browser real, sessão única e descartável](#d054)
+- [D055 — `docs/OBSERVABILIDADE.md` dedicado, README mantém só resumo + link](#d055)
+- [D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid](#d056)
 
 ---
 
@@ -2174,4 +2177,87 @@ não há nada a excluir. Nenhum trade-off novo introduzido em produção.
 matrícula concorrente crescer para uma escala de 'flash sale' (milhares de req/s pela mesma turma),
 revisitar com reserva via Redis + fila". Esta comparação (N=10/20 alunos) não altera esse risco nem o
 resolve — só confirma que, na escala testada, a estratégia atual continua sendo a escolha correta.
+
+## D054 — Captura de evidências visuais via Playwright com browser real, sessão única e descartável
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração
+**Spec relacionada:** specs/013-finalizacao.md
+**Contexto:** O PRD pede evidência visual de que o sistema e a observabilidade funcionam de ponta a ponta
+(tela de login, fluxo de matrícula, tela de administração, dashboard Grafana, trace no Jaeger, RabbitMQ
+Management, Swagger UI). O ambiente de execução da IA não tem uma ferramenta de screenshot/browser nativa
+disponível nesta sessão — foi preciso decidir como viabilizar a captura sem depender de mim (Pablo) rodar
+tudo manualmente.
+**Alternativas consideradas:**
+- Um subagent instala um browser real via Playwright, só para esta sessão de captura (fora de
+  `e2e/playwright/`, que deliberadamente não usa browser desde D049 — não entra no CI nem na suíte de
+  concorrência) — automatiza a captura, mas introduz uma dependência de browser local mesmo que descartável.
+- O Pablo captura manualmente, seguindo um roteiro exato (URL + ação + nome de arquivo esperado) preparado
+  pela IA — evita qualquer instalação nova, mas consome tempo do Pablo e depende de execução manual fiel ao
+  roteiro.
+- Híbrido: subagent automatiza as telas simples (login, Swagger, RabbitMQ Management), Pablo captura as que
+  dependem de timing/estado vivo mais difícil de scriptar (trace específico no Jaeger, dashboard Grafana com
+  dado real).
+**Decisão:** subagent com Playwright + browser real, sessão única e descartável.
+**Justificativa:** apresentei a recomendação com o motivo (evita consumir tempo do Pablo numa tarefa
+mecânica e repetitiva, que é exatamente o tipo de trabalho onde um agente é mais confiável que captura
+manual apressada) e ele confirmou sem alteração.
+**Trade-offs aceitos:** instalação de um browser Chromium local só para esta sessão (não persistida em
+`e2e/playwright/`, não afeta CI/D049); evidências que já são texto por natureza (query em
+`event_publication`, saída do teste de concorrência) viram bloco de código no documento em vez de imagem,
+para não forçar uma captura de tela onde texto já é mais claro.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado — a instalação é local,
+temporária, e não se torna parte do toolchain permanente do projeto.
+
+## D055 — `docs/OBSERVABILIDADE.md` dedicado, README mantém só resumo + link
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração
+**Spec relacionada:** specs/013-finalizacao.md
+**Contexto:** O Pablo pediu uma explicação de "papel + como funciona + como se conecta + URL/credenciais +
+o que olhar primeiro" para cada componente real da stack de observabilidade (Prometheus, Grafana, Loki,
+Promtail, Jaeger) — conteúdo substancial (~100+ linhas) que precisava de um lugar para viver.
+**Alternativas consideradas:**
+- Expandir a seção `## Observabilidade` já existente no README (hoje 34 linhas) — mantém tudo num arquivo
+  só, mas faria o README (313 linhas) crescer bastante só nessa seção, competindo por atenção com o
+  conteúdo operacional (como rodar, testes, autenticação).
+- `docs/OBSERVABILIDADE.md` dedicado, README reduzido a um resumo curto + a tabela de URLs/credenciais já
+  existente + link — mesmo padrão já usado no projeto (`docs/DECISIONS.md` = fonte granular,
+  `docs/ARQUITETURA.md` = síntese, README = resumo operacional).
+**Decisão:** `docs/OBSERVABILIDADE.md` dedicado.
+**Justificativa:** confirmei a recomendação sem alteração — evita que o README fique desproporcional e seu
+propósito operacional se perca, seguindo o mesmo padrão de separação já validado no projeto.
+**Trade-offs aceitos:** mais um arquivo de documentação para manter sincronizado se a stack de
+observabilidade mudar; mitigado pelo README linkar explicitamente, então a informação não fica "escondida".
+**Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum identificado.
+
+## D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid
+
+**Data:** 2026-07-13
+**Origem:** 🤖 Default da IA, aceito sem alteração
+**Spec relacionada:** specs/013-finalizacao.md
+**Contexto:** O Pablo sugeriu avaliar gerar o diagrama de módulos com o `Documenter` do próprio Spring
+Modulith (saída PlantUML/C4 a partir do teste de verificação de módulos já existente,
+`ModularidadeTest.java`) como evidência automática de que a modularização declarada é a real. O ambiente
+não tem PlantUML/Graphviz instalados para renderizar `.puml` em imagem.
+**Alternativas consideradas:**
+- Gerar o `.puml` via `Documenter` e tentar renderizar para PNG — exigiria instalar PlantUML + Graphviz só
+  para esta tarefa, custo desproporcional ao ganho (o texto do `.puml` já é evidência válida por si só,
+  inspecionável e renderizável em qualquer ferramenta/editor online de PlantUML).
+- Gerar o `.puml` via `Documenter`, comitar como texto (sem renderizar), e usar diagramas Mermaid
+  desenhados à mão para o conteúdo narrativo de `ARQUITETURA.md` (visão geral de módulos, fluxo do outbox)
+  — Mermaid é renderizado nativamente pelo GitHub em Markdown, sem depender de ferramenta externa.
+- Não gerar nenhum diagrama automático, só Mermaid manual — mais simples, mas perde a evidência automática
+  de que a modularização declarada bate com o código real (o `Documenter` deriva do mesmo
+  `ApplicationModules.of(...)` que `ModularidadeTest.verify()` já usa para reforçar os limites em tempo de
+  teste).
+**Decisão:** gerar o `.puml` via `Documenter` (evidência bruta complementar, comitada como texto em
+`docs/architecture/modules.puml`), diagramas principais de `ARQUITETURA.md` em Mermaid manual.
+**Justificativa:** confirmei a recomendação sem alteração — combina a evidência automática pedida pelo
+Pablo com diagramas legíveis sem exigir ferramenta externa para quem só quer ler o documento no GitHub.
+**Trade-offs aceitos:** o `.puml` não é renderizado neste repositório (só texto) — quem quiser a versão
+visual precisa colar em uma ferramenta de PlantUML; aceitável porque não é o diagrama principal do
+documento, só evidência complementar.
+**Riscos conhecidos / o que revisitar se o contexto mudar:** se o projeto crescer o suficiente para
+justificar CI gerando artefatos de documentação, revisitar renderização automática do `.puml`.
 
