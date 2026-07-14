@@ -1,6 +1,6 @@
 # 013 — Finalização (Fase 7 renomeada)
 
-**Status:** `aprovada`
+**Status:** `concluída`
 **Seção(ões) do PRD relacionadas:** §04 (documentação arquitetural), §05 (README esperado), §06 (critérios
 críticos de avaliação), §07 (diferenciais), §08 (como a entrega será analisada), §09 (entrevista técnica)
 **Módulo(s) Modulith afetado(s):** nenhum — só documentação (`docs/`, `README.md`, `specs/010`) e evidências
@@ -319,12 +319,24 @@ a auditoria de checklist (Task 5) confirmando que cada afirmação documentada t
   build`/`ng test` 26/26 verdes, 7 screenshots capturados e embutidos).
 - [x] `docs/DECISIONS.md` atualizado com todas as decisões da seção 5 (D054-D059 registradas — D054-D056 na
   Task 1, D057 na Task 5/5b, D059 no achado da Task 6; nenhuma decisão desta fase ficou fora do log).
-- [ ] `code-reviewer` executado — **pendente**: roda sobre o diff completo da fase (Task 1 até esta task),
-  como revisão final de branch, depois desta Task 9 — não antecipado aqui (mesmo erro já cometido e
-  corrigido na Fase 6, spec 012, commit `aa60b2e`; ver "Depois da Task 9" no brief de execução desta task).
-- [ ] `security-auditor` executado — **pendente**, mesmo motivo do item acima: roda junto com o
-  `code-reviewer` na revisão final de branch, ainda não disparada nesta sessão.
+- [x] `code-reviewer` executado — revisão final de branch (diff `8a73ca1..240e294`, Task 1 até a Task 9)
+  rodada em paralelo com o `security-auditor` (ambos em Opus). Veredito: "Ready to merge: With fixes" — 1
+  achado Important real (contagens de decisões desatualizadas/inconsistentes entre README/ARQUITETURA/
+  specs013, incluindo a seção "Uso de IA" contando a própria linha de exemplo do template de
+  `docs/DECISIONS.md` como uma decisão 🧑), corrigido nos commits `03214b6` + `81934e7` (59 entradas reais,
+  17/10/31/1 por origem, sweep completo confirmado sem ocorrência restante via `grep`). 2 achados Minor
+  (comentário impreciso em `ModularidadeTest.geraDocumentacaoDeModulos()`, corrigido no mesmo commit
+  `03214b6`; gap de auto-referência em `docs/OBSERVABILIDADE.md` para o contador
+  `mensageria.dlq.eventos`, aceito como está — não bloqueante).
+- [x] `security-auditor` executado — junto com o `code-reviewer` acima, mesmo diff. Veredito: "Ready to
+  merge: Yes", zero achados Critical/Important. Verificou: nenhum segredo real vazado nos 7 screenshots
+  novos ou no texto ao redor (só placeholders dev-only já aceitos em decisões anteriores, ex. D004); os 2
+  changes de código reais da fase (D059 RabbitMQContainer, fix do dropdown de papel) usam credenciais
+  efêmeras/corretas e não alteram o valor de papel efetivamente submetido. Recomendou conferência visual
+  manual de 3 screenshots (Swagger, Jaeger, RabbitMQ Management) por não conseguir inspecionar pixels de
+  PNG — feito pelo controlador diretamente após o relatório, confirmado limpo (sem token/senha visível em
+  nenhum dos 3).
 - [x] Esta spec atualizada para refletir o que foi de fato implementado — seção 6 (3 itens sequenciados +
   gate final) e esta seção 9 atualizadas nesta task com evidência real, não placeholder.
-- [x] `./mvnw clean verify` passando — confirmado verde na Task 6 (ver Gate final acima); nenhuma mudança de
-  código de produção desde então nesta fase (Tasks 7-9 são só documentação).
+- [x] `./mvnw clean verify` passando — confirmado verde na Task 6 e reconfirmado após os fixes da revisão
+  final de branch (147 testes, 0 falhas/erros, gate JaCoCo mantido, BUILD SUCCESS).
