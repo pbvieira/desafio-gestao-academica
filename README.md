@@ -203,19 +203,13 @@ que só traz postgres/redis/rabbitmq/keycloak). Todas as UIs abaixo ficam restri
 | Loki | sem UI própria — consultado via Grafana Explore | — |
 
 No Grafana, os datasources (Prometheus, Jaeger, Loki) já vêm provisionados, junto com um dashboard
-padrão **"Gestão - JVM & HTTP (básico)"** (heap da JVM, requisições HTTP/s, uptime, CPU — D009), pronto
-sem nenhuma configuração manual na UI.
+padrão **"Gestão - JVM & HTTP (básico)"** (heap da JVM, requisições HTTP/s, uptime, CPU e conflitos de
+vaga na confirmação de matrícula — D009/D052), pronto sem nenhuma configuração manual na UI.
 
-**Logs estruturados e correlação com trace:** a aplicação grava logs em formato ECS (JSON) no console e
-em `logs/gestao.log` (`logging.structured.format.console`/`.file=ecs`), incluindo `trace_id`/`span_id`
-automaticamente via MDC. O Promtail lê esse arquivo (D017 — a app roda no host, fora do compose, então
-não há como capturar seus logs pelo driver de container do Docker) e envia para o Loki; no Grafana
-Explore, cada linha de log com `traceId` tem um link direto (`derivedFields`) para o trace correspondente
-no Jaeger.
-
-**Métricas e tracing:** exportação via Micrometer — métricas em `/actuator/prometheus` (scrape do
-Prometheus) e traces via OTLP para o Jaeger (`management.otlp.tracing.endpoint`), com 100% de amostragem
-(`management.tracing.sampling.probability=1.0`).
+Explicação de papel/funcionamento/conexão de cada componente (pull vs. push, o que cada um armazena),
+incluindo o painel de negócio `matricula.vaga.conflito` (D052) e como logs e traces se correlacionam
+(`derivedFields` do Grafana — e por que essa correlação **não** atravessa a mensageria assíncrona, D034):
+**[docs/OBSERVABILIDADE.md](docs/OBSERVABILIDADE.md)**.
 
 **Actuator exposto:**
 - `GET /actuator/health` — público, sem autenticação.
