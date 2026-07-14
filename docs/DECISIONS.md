@@ -76,6 +76,7 @@ Cada entrada tem uma **Origem**, que é o dado mais importante para a entrevista
 - [D054 — Captura de evidências visuais via Playwright com browser real, sessão única e descartável](#d054)
 - [D055 — `docs/OBSERVABILIDADE.md` dedicado, README mantém só resumo + link](#d055)
 - [D056 — Diagrama de módulos via `Documenter` do Spring Modulith, comitado como `.puml`; fluxos narrativos em Mermaid](#d056)
+- [D057 — D003 revisitada: aplicação entra no `compose.yaml` nesta fase final](#d057)
 
 ---
 
@@ -2290,4 +2291,41 @@ visual precisa colar em uma ferramenta de PlantUML; aceitável porque não é o 
 documento, só evidência complementar.
 **Riscos conhecidos / o que revisitar se o contexto mudar:** se o projeto crescer o suficiente para
 justificar CI gerando artefatos de documentação, revisitar renderização automática do `.puml`.
+
+<a id="d057"></a>
+## D057 — D003 revisitada: aplicação entra no `compose.yaml` nesta fase final
+
+**Data:** 2026-07-13
+**Origem:** 🧑 Decisão do Pablo
+**Spec relacionada:** specs/013-finalizacao.md
+**Contexto:** A checklist literal do PRD (Task 5 da spec 013) encontrou que `compose.yaml` nunca sobe a
+própria aplicação Spring Boot — ela roda via `./mvnw spring-boot:run` no host, por
+[D003](DECISIONS.md#d003) ("Aplicação entra no Docker Compose só numa fase posterior... perto da entrega
+final"). O PRD pede "Docker Compose subindo aplicação, banco de dados e mensageria" de forma repetida e
+quase idêntica em três pontos do texto (§01.4, §03, §04) — não é só um item da tabela de critérios
+eliminatórios (esse fala em "execução reproduzível", que já é atendida via `./mvnw spring-boot:run`), mas é
+um requisito literal do PRD que continuava sem evidência real. O próprio D003 já previa este momento
+exato como o gatilho para revisitar ("antecipar essa validação antes da fase final") — estamos na fase
+final (Fase 7/spec 013), e a decisão nunca tinha sido reaberta até este achado.
+**Alternativas consideradas:**
+- Manter a aplicação fora do `compose.yaml`, documentar como trade-off consciente em
+  `docs/ARQUITETURA.md` — rápido e sem risco técnico, mas deixa um pedido literal do PRD (repetido 3x) sem
+  atender, o que pode pesar numa avaliação rigorosa do critério de arquitetura/execução.
+- Dockerizar a aplicação agora (`Dockerfile` + serviço novo em `compose.yaml`), validar rede/variáveis de
+  ambiente entre a app containerizada e os demais serviços, rerodar o gate e2e contra a app containerizada
+  — fecha o requisito ao pé da letra, exatamente o momento que D003 já havia sinalizado, mas é trabalho
+  real numa fase que deveria ser só documentação/evidência (risco de rede entre containers, já citado como
+  risco aceito pelo próprio D003).
+**Decisão:** dockerizar a aplicação agora — `compose.yaml` passa a subir aplicação, banco de dados e
+mensageria, fechando o requisito literal do PRD.
+**Justificativa (Pablo, ao ser perguntado):** confirmou a recomendação apresentada — mesmo sendo trabalho
+real numa fase pensada para ser só documentação, o risco de uma avaliação rigorosa penalizar a ausência da
+aplicação no compose (pedido 3x no texto do PRD) pesou mais que o custo de fechar isso agora, especialmente
+porque o próprio D003 já havia marcado este exato momento (fase final) como o gatilho para revisitar.
+**Trade-offs aceitos:** mais uma iteração de build de imagem a cada mudança de código a partir de agora
+(o motivo original de D003 para adiar) — aceitável, já que o desenvolvimento de domínio está encerrado,
+restando só documentação/evidência; risco de configuração de rede entre containers, já citado como
+possível em D003, precisa ser validado na prática (task de implementação, não só desta entrada de decisão).
+**Riscos conhecidos / o que revisitar se o contexto mudar:** nenhum novo além do já registrado em D003 —
+esta entrada fecha o ciclo de revisão que D003 previa, não introduz um risco novo.
 
